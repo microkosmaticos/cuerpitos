@@ -68,7 +68,7 @@ Las interacciones tendrán reglas de compatibilidad para evitar acciones contrad
 
 ## 10. Tecnología propuesta
 - JavaScript: lenguaje principal.
-- Vite: entorno para ejecutar el proyecto en el navegador.
+
 - p5.js: dibujo, animación y composición visual.
 - MediaPipe Pose Landmarker: detección de posiciones corporales.
 - Web Audio API o p5.sound: sonido.
