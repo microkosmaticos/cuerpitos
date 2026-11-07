@@ -2,6 +2,7 @@ import { CameraModel } from "./camera.js";
 import { BodyPoseModel } from "./bodypose.js";
 import { Pose } from "./pose.js";
 import { SkeletonView } from "./skeleton-view.js";
+import { CONFIG } from "./config.js";
 
 /**
  * Orchestrator.
@@ -52,7 +53,7 @@ export class AppController {
       this.fps = Math.round((this.frameCount * 1000) / elapsed);
       this.frameCount = 0;
       this.fpsStartedAt = now;
-      this.setStatus(`personas: ${poses.length}  ·  fps: ${this.fps}`);
+      this.setStatus(`personas: ${poses.length}/${CONFIG.model.maxPoses}  ·  fps: ${this.fps}`);
     }
   }
 

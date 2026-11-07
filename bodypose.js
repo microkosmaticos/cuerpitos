@@ -42,8 +42,26 @@ export class BodyPoseModel {
       this.model.detectStop();
     }
 
-    this.model.detectStart(video, (poses) => onPoses(poses));
+    this.model.detectStart(video, (poses) => {
+      onPoses(this.limitPoses(poses));
+    });
     this.running = true;
+  }
+
+  /**
+   * Keeps the N most confident people. The installation must never show more
+   * than two organisms, even if a third person walks into frame.
+   */
+  limitPoses(poses) {
+    const max = CONFIG.model.maxPoses;
+    if (!max || poses.length <= max) return poses;
+
+    return [...poses]
+      .sort(
+        (a, b) =>
+          (b.score ?? b.box?.score ?? 0) - (a.score ?? a.box?.score ?? 0)
+      )
+      .slice(0, max);
   }
 
   stop() {

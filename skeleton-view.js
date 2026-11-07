@@ -4,8 +4,8 @@ import { CONFIG } from "./config.js";
  * Skeleton renderer.
  *
  * Uses p5 in instance mode so it never pollutes globals. It draws only the
- * detected structure: joints as circles, bones as lines. The webcam image is
- * deliberately not drawn in stage 1.
+ * detected structure: joints as circles, bones as lines, plus a neck line and
+ * a head circle. The webcam image is deliberately not drawn in stage 1.
  */
 export class SkeletonView {
   constructor(container) {
@@ -69,14 +69,32 @@ export class SkeletonView {
       scale,
       offsetX: (p.width - this.videoWidth * scale) / 2,
       offsetY: (p.height - this.videoHeight * scale) / 2,
+      width: p.width,
     };
   }
 
   project(point, transform) {
+    const x = point.x * transform.scale + transform.offsetX;
     return {
-      x: point.x * transform.scale + transform.offsetX,
+      // Mirror the final position so movement feels like a reflection.
+      x: CONFIG.skeleton.mirror ? transform.width - x : x,
       y: point.y * transform.scale + transform.offsetY,
     };
+  }
+
+  visiblePoint(pose, name) {
+    const point = pose.get(name);
+    if (!point) return null;
+    if ((point.confidence ?? 0) < CONFIG.skeleton.minConfidence) return null;
+    return point;
+  }
+
+  midpoint(a, b) {
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  }
+
+  distance(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   render(p) {
@@ -115,6 +133,9 @@ export class SkeletonView {
         p.line(start.x, start.y, end.x, end.y);
       }
 
+      // Neck + head, drawn between bones and joints.
+      this.drawHead(p, pose, colors, transform);
+
       // Joints.
       p.noStroke();
       p.fill(colors.joint);
@@ -128,5 +149,81 @@ export class SkeletonView {
         p.circle(projected.x, projected.y, keypointRadius * 2);
       }
     });
+  }
+
+  /**
+   * Head structure: a neck line from the shoulder midpoint to the border of a
+   * head circle. The circle is centred on the ears (falling back to eyes or
+   * nose) and scales with the body so every person gets a proportional head.
+   */
+  drawHead(p, pose, colors, transform) {
+    const head = CONFIG.skeleton.head;
+
+    const leftEar = this.visiblePoint(pose, "left_ear");
+    const rightEar = this.visiblePoint(pose, "right_ear");
+    const leftEye = this.visiblePoint(pose, "left_eye");
+    const rightEye = this.visiblePoint(pose, "right_eye");
+    const nose = this.visiblePoint(pose, "nose");
+    const leftShoulder = this.visiblePoint(pose, "left_shoulder");
+    const rightShoulder = this.visiblePoint(pose, "right_shoulder");
+
+    const ears = leftEar && rightEar ? this.midpoint(leftEar, rightEar) : null;
+    const eyes = leftEye && rightEye ? this.midpoint(leftEye, rightEye) : null;
+    const center = ears ?? eyes ?? nose;
+    if (!center) return;
+
+    const shoulderCenter =
+      leftShoulder && rightShoulder
+        ? this.midpoint(leftShoulder, rightShoulder)
+        : null;
+
+    const earDistance = leftEar && rightEar ? this.distance(leftEar, rightEar) : 0;
+    const eyeDistance = leftEye && rightEye ? this.distance(leftEye, rightEye) : 0;
+    const shoulderWidth =
+      leftShoulder && rightShoulder
+        ? this.distance(leftShoulder, rightShoulder)
+        : 0;
+
+    const radius = Math.max(
+      earDistance * head.earFactor,
+      eyeDistance * head.eyeFactor,
+      shoulderWidth * head.shoulderFactor,
+      head.minRadius
+    );
+
+    const projectedCenter = this.project(center, transform);
+    const projectedRadius = radius * transform.scale;
+
+    // Neck: from the shoulder midpoint to the circle border, so the line does
+    // not pierce the head.
+    if (shoulderCenter) {
+      const projectedShoulders = this.project(shoulderCenter, transform);
+      const dx = projectedShoulders.x - projectedCenter.x;
+      const dy = projectedShoulders.y - projectedCenter.y;
+      const length = Math.hypot(dx, dy) || 1;
+      const neckEnd = {
+        x: projectedCenter.x + (dx / length) * projectedRadius,
+        y: projectedCenter.y + (dy / length) * projectedRadius,
+      };
+
+      p.stroke(colors.bone);
+      p.strokeWeight(head.neckWeight);
+      p.line(
+        projectedShoulders.x,
+        projectedShoulders.y,
+        neckEnd.x,
+        neckEnd.y
+      );
+    }
+
+    // Head circle.
+    p.noFill();
+    p.stroke(colors.joint);
+    p.strokeWeight(head.neckWeight);
+    p.circle(
+      projectedCenter.x,
+      projectedCenter.y,
+      projectedRadius * 2
+    );
   }
 }

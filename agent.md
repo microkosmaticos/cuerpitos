@@ -6,11 +6,12 @@ Cada persona llega al mundo digital siendo distinta, y su organismo se relaciona
 La instalación utiliza una cámara web para detectar hasta dos personas. A partir de sus movimientos aparecen organismos digitales abstractos, generativos y deformables. Cada organismo tiene una identidad visual propia y un comportamiento parcialmente autónomo.
 
 ## 2. Aparición y detección
-- Se detectarán como máximo dos personas.
+- Se detectarán como máximo dos personas. Si hay más, solo se siguen las dos de mayor confianza.
 - La persona debe estar de frente a la cámara y bien ubicada para que aparezca su organismo.
 - Se trabajará con el encuadre de cintura hacia arriba.
-- No se volteará horizontalmente la imagen de la cámara.
+- La proyección visual será en espejo: el movimiento se refleja horizontalmente en pantalla, de modo que la mano derecha de la persona aparece a la derecha de quien mira, como frente a un espejo. Los datos de pose se mantienen en coordenadas reales; el espejo se aplica únicamente al dibujar.
 - No se reconocerán rostros ni se dibujarán caras.
+- Durante el desarrollo del módulo de tracking, la cámara no se muestra: solo se visualiza un esqueleto de seguimiento del tren superior (puntos, líneas, cuello y círculo de cabeza). Puede incluir puntos de ojos, nariz y orejas como referencia de posición; no es un rostro dibujado ni la estética final de los organismos.
 - Si una persona se retira, su organismo desaparecerá mediante una transición.
 - Si vuelve a entrar, nacerá un organismo nuevo, con otra identidad generativa.
 
@@ -20,7 +21,7 @@ La instalación utiliza una cámara web para detectar hasta dos personas. A part
 - Su forma podrá inspirarse en siluetas, extremidades, masas, curvas y formas blandas.
 - Cada organismo tendrá proporciones, deformaciones, texturas y una paleta de color propias.
 - Se utilizarán algunas familias de formas y paletas coherentes, con variaciones aleatorias.
-- No tendrán rostro ni cuello.
+- No tendrán rostro ni cuello. (Esto aplica a los organismos; el esqueleto de seguimiento es solo una herramienta de verificación.)
 - Su identidad visual se generará al nacer y se conservará durante toda su aparición.
 
 ## 4. Identidad y transformación
@@ -59,17 +60,18 @@ Las interacciones tendrán reglas de compatibilidad para evitar acciones contrad
 - Habrá pausas para evitar que los comportamientos se repitan constantemente.
 
 ## 9. Entorno visual y sonido
-- La cámara web será el fondo inicial de la experiencia.
+- La cámara web será el fondo inicial de la experiencia (se incorpora en la etapa de entorno visual; en la etapa de tracking la cámara permanece oculta y solo se dibuja el esqueleto).
 - Los organismos se dibujarán encima de la imagen de la cámara.
+- El fondo de cámara, cuando se incorpore, seguirá el mismo criterio de espejo que el esqueleto, para que la experiencia sea coherente.
 - Se podrá añadir una capa de color o transparencia para mejorar el contraste.
 - El estilo visual será abstracto, orgánico, redondeado y luminoso, con gradientes, transparencias y texturas.
 - Habrá música ambiental y efectos sonoros asociados a algunos acontecimientos.
 - El sonido podrá silenciarse.
 
 ## 10. Tecnología propuesta
-- JavaScript: lenguaje principal.
+- JavaScript: lenguaje principal, sin build step (ES Modules).
 - p5.js: dibujo, animación y composición visual.
-- MediaPipe Pose Landmarker: detección de posiciones corporales.
+- ml5.js (bodyPose) para estimación de pose: modelo MoveNet MULTIPOSE para detectar hasta dos personas con seguimiento por ID. La alternativa BlazePose de ml5 corre sobre MediaPipe.
 - Web Audio API o p5.sound: sonido.
 
 ## 11. Privacidad

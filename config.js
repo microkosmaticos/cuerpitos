@@ -14,6 +14,8 @@ export const CONFIG = {
 
   model: {
     name: "MoveNet",
+    // Hard limit for the installation: at most two people on stage.
+    maxPoses: 2,
     options: {
       // MULTIPOSE_LIGHTNING detects several people and keeps a stable id per
       // person, which is what the two-person stage will need.
@@ -31,6 +33,20 @@ export const CONFIG = {
     minConfidence: 0.3,
     keypointRadius: 7,
     boneWeight: 3,
+    // Present the skeleton as a mirror: the person's right hand appears on
+    // the viewer's right, like looking into a mirror.
+    mirror: true,
+
+    head: {
+      // Factors are multiplied by a reference distance (ears, eyes or
+      // shoulders) to keep the head circle proportional to each body.
+      earFactor: 0.75,
+      eyeFactor: 1.6,
+      shoulderFactor: 0.18,
+      // Minimum radius in video pixels, for when the face is partly hidden.
+      minRadius: 16,
+      neckWeight: 3,
+    },
 
     // MoveNet keypoint names that make up head, torso and upper limbs.
     // Knee and ankle connections are automatically excluded.
