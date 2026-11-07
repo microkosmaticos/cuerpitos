@@ -637,3 +637,31 @@ describe('Precondiciones de eventos individuales', () => {
     assert.equal(EVENTS.hug.conditions({ self: a, other: b, relationship: null }), false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Estado desmayado bloquea acciones (B02.1)
+// ---------------------------------------------------------------------------
+
+describe('Estado desmayado bloquea acciones', () => {
+  it('un organismo con emoción fainted no puede iniciar otros eventos', () => {
+    const org = new OrganismState('org-1');
+    org.setEmotion('fainted');
+    assert.throws(() => org.startEvent('hug', { partnerId: 'org-2' }), /bloquea/);
+    assert.throws(() => org.startEvent('approach', { partnerId: 'org-2' }), /bloquea/);
+    assert.throws(() => org.startEvent('faint'), /bloquea/);
+  });
+
+  it('shake es la recuperación y sí puede iniciarse estando desmayado', () => {
+    const org = new OrganismState('org-1');
+    org.setEmotion('fainted');
+    assert.doesNotThrow(() => org.startEvent('shake', { duration: 1000 }));
+    assert.equal(org.hasActiveEvent(), true);
+    assert.equal(org.activeEvent.eventId, 'shake');
+  });
+
+  it('una emoción no bloqueante (nauseous) permite iniciar eventos', () => {
+    const org = new OrganismState('org-1');
+    org.setEmotion('nauseous');
+    assert.doesNotThrow(() => org.startEvent('faint', { duration: 1000 }));
+  });
+});

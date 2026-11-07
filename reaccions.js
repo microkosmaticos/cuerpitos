@@ -42,9 +42,15 @@ function deepFreeze(value) {
 //   restrictions  string[]             ids incompatibles (del mismo catálogo).
 //   effects       string[]             ids que produce al ejecutarse (opcional).
 //
+// Campos exclusivos de las emociones:
+//   blocksActions boolean              si true, impide iniciar eventos mientras
+//                                      se mantiene esta emoción (p. ej. fainted).
+//
 // Campos exclusivos de los eventos:
 //   duration      [number, number]     rango de duración en ms (mínimo, máximo).
 //   conditions    (ctx) => boolean     precondición ejecutable.
+//   recoversFrom  string[]             emociones bloqueantes de las que este
+//                                      evento recupera (p. ej. shake → fainted).
 //
 // Semántica de `restrictions`: declara exclusión mutua (eventos o estados que
 // no pueden coincidir en el tiempo) y se consulta de forma simétrica con
@@ -120,6 +126,7 @@ const EMOTIONS = deepFreeze({
     description: 'Desmayado: inconsciente de forma temporal.',
     triggers: 'Resultado del evento de desmayo.',
     restrictions: ['attracted', 'euphoric'],
+    blocksActions: true,
   },
 });
 
@@ -257,6 +264,7 @@ const EVENTS = deepFreeze({
     conditions: (ctx) => ctx.self.emotion === 'fainted' || ctx.self.emotion === 'euphoric',
     restrictions: [],
     effects: ['neutral'],
+    recoversFrom: ['fainted'],
   },
 
   limb_stretch: {
@@ -319,6 +327,11 @@ class OrganismState {
   startEvent(eventId, { partnerId = null, startedAt = 0, duration = 0, now = Date.now() } = {}) {
     if (!EVENTS[eventId]) throw new Error(`Evento inexistente: ${eventId}`);
     if (!this.canAct(now)) throw new Error(`No puede iniciar "${eventId}": ocupado o en cooldown`);
+    const emotion = EMOTIONS[this.emotion];
+    const event = EVENTS[eventId];
+    if (emotion && emotion.blocksActions && !(event.recoversFrom || []).includes(this.emotion)) {
+      throw new Error(`No puede iniciar "${eventId}": la emoción "${this.emotion}" bloquea las acciones`);
+    }
     this.activeEvent = {
       eventId,
       partnerId: partnerId !== null ? partnerId : this.partnerId,
