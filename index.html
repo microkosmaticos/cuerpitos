@@ -1,11 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-</head>
-<body>
-    
-</body>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cuerpitos — Etapa 1: tren superior</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main id="app" aria-label="Esqueleto detectado"></main>
+
+    <div id="hud" role="status" aria-live="polite">iniciando…</div>
+
+    <!--
+      Classic scripts run before the module below, so `p5` and `ml5` exist
+      as globals by the time main.js executes. Versions are pinned on purpose.
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.10/lib/p5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ml5@1.4.0/dist/ml5.min.js"></script>
+    <script type="module" src="./main.js"></script>
+  </body>
 </html>
