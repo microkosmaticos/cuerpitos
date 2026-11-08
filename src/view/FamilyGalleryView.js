@@ -10,6 +10,7 @@
 // ============================================================
 
 import { calcularAjuste } from "./canvasFit.js";
+import { mostrarExtras, mostrarParte } from "../config/visual.js";
 
 export class FamilyGalleryView {
   /**
@@ -43,6 +44,8 @@ export class FamilyGalleryView {
     const ordenadas = [...forma.parts].sort((a, b) => pesoDeDibujo(a) - pesoDeDibujo(b));
 
     for (const parte of ordenadas) {
+      if (!mostrarParte(parte)) continue;
+
       // Dos tonos neutros por ahora: las paletas son otra tarea.
       // El tono más claro es el núcleo y el más oscuro el resto.
       if (parte.role === "nucleo") p.fill(232, 232, 242);
@@ -56,6 +59,7 @@ export class FamilyGalleryView {
 
       // Decoraciones que viajan pegadas a la parte (por ejemplo, los ojos
       // de la cabeza). Van más oscuras para que se distingan.
+      if (!mostrarExtras()) continue;
       for (const extra of parte.extras ?? []) {
         p.fill(26, 26, 34);
         p.beginShape();

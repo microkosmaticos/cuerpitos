@@ -20,6 +20,7 @@
 
 import { calcularAjuste } from "./canvasFit.js";
 import { colorDeRol } from "../model/palette/createPalette.js";
+import { mostrarExtras, mostrarParte } from "../config/visual.js";
 
 const FONDOS = ["oscuro", "medio", "camara"];
 
@@ -173,6 +174,8 @@ export class OrganismGalleryView {
     ctx.globalAlpha = 0.92;
 
     for (const parte of ordenadas) {
+      if (!mostrarParte(parte)) continue;
+
       const color = colorDeRol(palette, parte.role);
       const centro = centroide(parte.points);
       const radio = radioMaximo(parte.points, centro);
@@ -200,13 +203,15 @@ export class OrganismGalleryView {
 
       // Los ojos viajan pegados a la cabeza.
       ctx.globalAlpha = 0.85;
-      for (const extra of parte.extras ?? []) {
-        ctx.beginPath();
-        ctx.moveTo(extra[0].x, extra[0].y);
-        for (let i = 1; i < extra.length; i++) ctx.lineTo(extra[i].x, extra[i].y);
-        ctx.closePath();
-        ctx.fillStyle = "rgba(18, 18, 26, 0.9)";
-        ctx.fill();
+      if (mostrarExtras()) {
+        for (const extra of parte.extras ?? []) {
+          ctx.beginPath();
+          ctx.moveTo(extra[0].x, extra[0].y);
+          for (let i = 1; i < extra.length; i++) ctx.lineTo(extra[i].x, extra[i].y);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(18, 18, 26, 0.9)";
+          ctx.fill();
+        }
       }
       ctx.globalAlpha = 0.92;
     }

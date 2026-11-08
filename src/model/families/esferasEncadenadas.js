@@ -44,6 +44,7 @@ const ANTEBRAZOS = [0, 1, 2].map((indice) => ({
 }));
 
 const CONEXIONES = [
+  { child: "cabeza", parent: "nucleo", at: "borde", angleRange: { min: 0, max: 360 } },
   ...BRAZOS.map((slot) => ({
     child: slot.id,
     parent: "nucleo",
@@ -65,6 +66,7 @@ export const ESFERAS_ENCADENADAS = congelarProfundo({
 
   roles: {
     nucleo: { min: 1, max: 1 },
+    cabeza: { min: 1, max: 1 },
     brazo: { min: 2, max: 3 },
     antebrazo: { min: 2, max: 3 },
   },
@@ -83,6 +85,19 @@ export const ESFERAS_ENCADENADAS = congelarProfundo({
     },
     ...BRAZOS,
     ...ANTEBRAZOS,
+    {
+      // La cabeza va rígida con el torso: no tiene ancla propia.
+      id: "cabeza",
+      role: "cabeza",
+      baseShape: "silueta",
+      silhouette: "forma-4/cabeza",
+      origen: true,
+      anchor: null,
+      ranges: {
+        width: { min: 241, max: 501 },
+        height: { min: 241, max: 501 },
+      },
+    },
   ],
 
   connections: CONEXIONES,
@@ -97,6 +112,8 @@ export const ESFERAS_ENCADENADAS = congelarProfundo({
       { slotId: "antebrazo-1", width: 145, height: 145, angle: 202.5 },
       { slotId: "antebrazo-2", width: 145, height: 145, angle: 337.5 },
       { slotId: "antebrazo-3", width: 145, height: 145, angle: 90 },
+
+      { slotId: "cabeza", width: 371, height: 371, angle: 270 },
     ],
   },
 });

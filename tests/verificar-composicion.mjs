@@ -17,6 +17,10 @@ import { FamilyRegistry } from "../src/model/FamilyRegistry.js";
 import { createGenome, SEPARACION_GARANTIZADA } from "../src/model/genome/createGenome.js";
 import { construirForma } from "../src/model/families/canonical.js";
 import { getSilueta } from "../src/model/families/silhouettes.js";
+import { bornOrganism } from "../src/model/genome/bornOrganism.js";
+import { mostrarParte } from "../src/config/visual.js";
+
+const familiasAnatomicas = FamilyRegistry.listFamilies();
 
 const reportes = [];
 
@@ -107,7 +111,7 @@ for (const familia of FamilyRegistry.listFamilies()) {
 
     // 2. Las piezas que salen del torso respetan la separación mínima.
     const raices = forma.parts.filter(
-      (parte) => conexionPorHijo.get(parte.id)?.parent === "nucleo"
+      (parte) => conexionPorHijo.get(parte.id)?.parent === "nucleo" && parte.role !== "cabeza"
     );
 
     for (let i = 0; i < raices.length; i++) {
@@ -135,6 +139,40 @@ for (const familia of FamilyRegistry.listFamilies()) {
   comprobar(
     problemasDeSeparacion.length === 0,
     `${problemasDeSeparacion.length} pares demasiado juntos -> ${problemasDeSeparacion.slice(0, 3).join(" | ")}`
+  );
+}
+
+// ------------------------------------------------------------
+// Las partes dibujadas conservan lo que el dibujo tenía
+// ------------------------------------------------------------
+
+{
+  const reporte = crearReporte("Antebrazos dibujados");
+  const comprobar = comprobarEn(reporte);
+
+  const problemas = [];
+
+  for (const familia of familiasAnatomicas) {
+    const minimo = familia.roles.antebrazo?.min ?? 0;
+
+    for (let semilla = 0; semilla < SEMILLAS; semilla++) {
+      const organismo = bornOrganism(semilla);
+      if (organismo.familyId !== familia.id) continue;
+
+      const dibujadas = organismo.shape.parts.filter(mostrarParte);
+      const antebrazos = dibujadas.filter((parte) => parte.role === "antebrazo").length;
+
+      if (antebrazos < minimo) {
+        problemas.push(
+          `semilla ${semilla} (${familia.id}): ${antebrazos} antebrazos dibujados, mínimo ${minimo}`
+        );
+      }
+    }
+  }
+
+  comprobar(
+    problemas.length === 0,
+    `${problemas.length} organismos con menos antebrazos de los que declara su familia -> ${problemas.slice(0, 3).join(" | ")}`
   );
 }
 

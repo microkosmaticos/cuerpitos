@@ -7,6 +7,7 @@
 // ============================================================
 
 import { calcularAjuste } from "./canvasFit.js";
+import { mostrarParte } from "../config/visual.js";
 
 export class OrganismView {
   /**
@@ -43,6 +44,7 @@ export class OrganismView {
     // El orden importa: se dibuja de atrás hacia adelante,
     // igual que en el SVG original (torso al final, arriba de todo).
     for (const part of shape.visibleParts()) {
+      if (!mostrarParte(part)) continue;
       for (const side of part.sides) {
         p.fill(side.color);
         p.beginShape();

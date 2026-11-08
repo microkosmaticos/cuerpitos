@@ -44,6 +44,7 @@ const ANTEBRAZOS = [0, 1, 2].map((indice) => ({
 }));
 
 const CONEXIONES = [
+  { child: "cabeza", parent: "nucleo", at: "borde", angleRange: { min: 0, max: 360 } },
   ...BRAZOS.map((slot) => ({
     child: slot.id,
     parent: "nucleo",
@@ -65,6 +66,7 @@ export const SERPIENTE_ALTERNADA = congelarProfundo({
 
   roles: {
     nucleo: { min: 1, max: 1 },
+    cabeza: { min: 1, max: 1 },
     brazo: { min: 2, max: 3 },
     antebrazo: { min: 2, max: 3 },
   },
@@ -83,6 +85,19 @@ export const SERPIENTE_ALTERNADA = congelarProfundo({
     },
     ...BRAZOS,
     ...ANTEBRAZOS,
+    {
+      // La cabeza va rígida con el torso: no tiene ancla propia.
+      id: "cabeza",
+      role: "cabeza",
+      baseShape: "silueta",
+      silhouette: "forma-2/cabeza",
+      origen: true,
+      anchor: null,
+      ranges: {
+        width: { min: 528, max: 1096 },
+        height: { min: 365, max: 757 },
+      },
+    },
   ],
 
   connections: CONEXIONES,
@@ -97,6 +112,8 @@ export const SERPIENTE_ALTERNADA = congelarProfundo({
       { slotId: "antebrazo-1", width: 291, height: 137, angle: 186.4 },
       { slotId: "antebrazo-2", width: 291, height: 137, angle: 353.6 },
       { slotId: "antebrazo-3", width: 291, height: 137, angle: 90 },
+
+      { slotId: "cabeza", width: 812, height: 561, angle: 268 },
     ],
   },
 });

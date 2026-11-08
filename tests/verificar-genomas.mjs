@@ -126,6 +126,8 @@ function problemasDelGenoma(familia, genome) {
   for (const parte of genome.parts) {
     const conexion = conexionPorHijo.get(parte.slotId);
     if (!conexion) continue;
+    // La cabeza va rígida con el torso: no entra en la separación.
+    if (slotsPorId.get(parte.slotId)?.role === "cabeza") continue;
     if (!hermanosPorPadre.has(conexion.parent)) hermanosPorPadre.set(conexion.parent, []);
     hermanosPorPadre.get(conexion.parent).push(parte);
   }

@@ -50,6 +50,10 @@ export function createGenome(familia, seed) {
   // 1. Cuántas partes de cada rol.
   const cantidadPorRol = new Map();
   for (const [rol, rango] of Object.entries(familia.roles)) {
+    // La cabeza es siempre 1 y se sortea aparte, con su propio
+    // generador: así no consume números del generador principal y
+    // agregarla no cambia la anatomía de ninguna semilla conocida.
+    if (rol === "cabeza") continue;
     cantidadPorRol.set(rol, rng.int(rango.min, rango.max));
   }
 
@@ -78,6 +82,21 @@ export function createGenome(familia, seed) {
     const parte = { slotId: slot.id, ...valores.get(slot.id) };
     if (angulos.has(slot.id)) parte.angle = angulos.get(slot.id);
     partes.push(parte);
+  }
+
+  // 6. La cabeza, si la familia la declara, va con su PROPIO generador.
+  //    Es siempre 1, va rígida con el torso (sin ancla de tracking) y
+  //    no altera ningún valor de la anatomía ya sorteada.
+  const slotCabeza = familia.slots.find((slot) => slot.role === "cabeza");
+  if (slotCabeza) {
+    const rngCabeza = new SeededRandom((rng.seed ^ 0x1b873593) >>> 0);
+    const direccion = radianesAGrados(getSilueta(slotCabeza.silhouette).direccion);
+
+    partes.push({
+      slotId: slotCabeza.id,
+      ...sortearValores(rngCabeza, slotCabeza),
+      angle: normalizarAngulo(direccion + rngCabeza.range(-GIRO_MAXIMO, GIRO_MAXIMO)),
+    });
   }
 
   // 6. Padres antes que hijos.

@@ -47,6 +47,7 @@ const ANTEBRAZOS = [0, 1, 2, 3].map((indice) => ({
 
 // Cada antebrazo cuelga de su brazo, nunca del torso.
 const CONEXIONES = [
+  { child: "cabeza", parent: "nucleo", at: "borde", angleRange: { min: 0, max: 360 } },
   ...BRAZOS.map((slot) => ({
     child: slot.id,
     parent: "nucleo",
@@ -68,6 +69,7 @@ export const ABANICO_EXTREMIDADES = congelarProfundo({
 
   roles: {
     nucleo: { min: 1, max: 1 },
+    cabeza: { min: 1, max: 1 },
     brazo: { min: 2, max: 4 },
     antebrazo: { min: 2, max: 4 },
   },
@@ -86,6 +88,19 @@ export const ABANICO_EXTREMIDADES = congelarProfundo({
     },
     ...BRAZOS,
     ...ANTEBRAZOS,
+    {
+      // La cabeza va rígida con el torso: no tiene ancla propia.
+      id: "cabeza",
+      role: "cabeza",
+      baseShape: "silueta",
+      silhouette: "forma-1/cabeza",
+      origen: true,
+      anchor: null,
+      ranges: {
+        width: { min: 493, max: 1023 },
+        height: { min: 320, max: 666 },
+      },
+    },
   ],
 
   connections: CONEXIONES,
@@ -101,6 +116,8 @@ export const ABANICO_EXTREMIDADES = congelarProfundo({
       { slotId: "antebrazo-1", width: 200, height: 177, angle: 201.1 },
       { slotId: "antebrazo-2", width: 200, height: 177, angle: 340.7 },
       { slotId: "antebrazo-3", width: 200, height: 177, angle: 90 },
+
+      { slotId: "cabeza", width: 758, height: 493, angle: 295.6 },
     ],
   },
 });

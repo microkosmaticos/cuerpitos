@@ -44,6 +44,7 @@ const ANTEBRAZOS = [0, 1, 2].map((indice) => ({
 }));
 
 const CONEXIONES = [
+  { child: "cabeza", parent: "nucleo", at: "borde", angleRange: { min: 0, max: 360 } },
   ...BRAZOS.map((slot) => ({
     child: slot.id,
     parent: "nucleo",
@@ -65,6 +66,7 @@ export const RACIMO_LATERAL = congelarProfundo({
 
   roles: {
     nucleo: { min: 1, max: 1 },
+    cabeza: { min: 1, max: 1 },
     brazo: { min: 2, max: 3 },
     antebrazo: { min: 2, max: 3 },
   },
@@ -83,6 +85,19 @@ export const RACIMO_LATERAL = congelarProfundo({
     },
     ...BRAZOS,
     ...ANTEBRAZOS,
+    {
+      // La cabeza va rígida con el torso: no tiene ancla propia.
+      id: "cabeza",
+      role: "cabeza",
+      baseShape: "silueta",
+      silhouette: "forma-3/cabeza",
+      origen: true,
+      anchor: null,
+      ranges: {
+        width: { min: 397, max: 824 },
+        height: { min: 445, max: 925 },
+      },
+    },
   ],
 
   connections: CONEXIONES,
@@ -97,6 +112,8 @@ export const RACIMO_LATERAL = congelarProfundo({
       { slotId: "antebrazo-1", width: 250, height: 159, angle: 210.8 },
       { slotId: "antebrazo-2", width: 250, height: 159, angle: 329.2 },
       { slotId: "antebrazo-3", width: 250, height: 159, angle: 90 },
+
+      { slotId: "cabeza", width: 610, height: 685, angle: 231.5 },
     ],
   },
 });

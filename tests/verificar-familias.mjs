@@ -160,14 +160,22 @@ function verificarDatos(familia, reporte) {
   const idsSlots = familia.slots.map((slot) => slot.id);
   comprobar(new Set(idsSlots).size === idsSlots.length, `${nombre}: hay ids de slot repetidos`);
 
-  // Anclas
+  // Anclas: solo las partes móviles de tracking. La cabeza va rígida
+  // con el torso, así que no tiene ancla.
   const nucleo = familia.slots.find((slot) => slot.role === "nucleo");
   comprobar(Boolean(nucleo), `${nombre}: falta el núcleo`);
   if (nucleo) {
     comprobar(nucleo.anchor === null, `${nombre}: el núcleo no debe tener ancla`);
   }
 
-  const moviles = familia.slots.filter((slot) => slot.role !== "nucleo");
+  const cabeza = familia.slots.find((slot) => slot.role === "cabeza");
+  if (cabeza) {
+    comprobar(cabeza.anchor === null, `${nombre}: la cabeza no debe tener ancla propia`);
+  }
+
+  const moviles = familia.slots.filter(
+    (slot) => slot.role !== "nucleo" && slot.role !== "cabeza"
+  );
   const anclas = moviles.map((slot) => slot.anchor);
   const anclasEsperadas = moviles.map((_, indice) => indice);
   comprobar(
