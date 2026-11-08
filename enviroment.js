@@ -134,25 +134,25 @@ function inflateRect(rect, bleed) {
    ------------------------------------------------------------------ */
 
 /** Strip width in canvas pixels; the strip count adapts to the window width. */
-const WAVES_STRIP_WIDTH = 8;
+const WAVES_STRIP_WIDTH = 5;
 
 /** Safety limits for the adaptive strip count. */
-const WAVES_MIN_STRIPS = 96;
-const WAVES_MAX_STRIPS = 360;
+const WAVES_MIN_STRIPS = 160;
+const WAVES_MAX_STRIPS = 460;
 
-/** Wave height, as a fraction of the layer height (~11 px on a 900 tall window). */
-const WAVES_AMPLITUDE = 0.012;
+/** Wave height, as a fraction of the layer height (~27 px on a 900 tall window). */
+const WAVES_AMPLITUDE = 0.03;
 
-/** Slow swell: the wave height breathes +/- 25% of itself. */
-const WAVES_AMPLITUDE_SWING = 0.25;
+/** The wave height breathes down to this fraction of its maximum. */
+const WAVES_AMPLITUDE_MIN = 0.7;
 
 /** Overscan around the layer: always greater than the maximum offset. */
-const WAVES_BLEED = 0.04;
+const WAVES_BLEED = 0.07;
 
 /** Periods in seconds: slow, and deliberately not multiples of each other. */
-const WAVES_PRIMARY_PERIOD = 31;
-const WAVES_SECONDARY_PERIOD = 47;
-const WAVES_SWELL_PERIOD = 26;
+const WAVES_PRIMARY_PERIOD = 10;
+const WAVES_SECONDARY_PERIOD = 15;
+const WAVES_SWELL_PERIOD = 23;
 
 /** Weights of the three wave components; they add up to 1. */
 const WAVES_PRIMARY_WEIGHT = 0.55;
@@ -199,7 +199,11 @@ function drawAnimatedWaves(layer, cover) {
   // independent and always continuous (no state to reset or drift).
   const t = millis() / 1000;
 
-  const swell = 1 + Math.sin((t / WAVES_SWELL_PERIOD) * Math.PI * 2) * WAVES_AMPLITUDE_SWING;
+  // the wave height breathes between WAVES_AMPLITUDE_MIN and 100% of
+  // the amplitude, so the layer never looks like it is being pushed
+  // by a constant, mechanical force
+  const breath = 0.5 + 0.5 * Math.sin((t / WAVES_SWELL_PERIOD) * Math.PI * 2);
+  const swell = WAVES_AMPLITUDE_MIN + (1 - WAVES_AMPLITUDE_MIN) * breath;
   const amplitude = cover.h * WAVES_AMPLITUDE * swell;
 
   // the layer is drawn slightly larger than the screen so that the
