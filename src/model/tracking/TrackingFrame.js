@@ -55,6 +55,8 @@ export const MAXIMO_DE_PERSONAS = 2;
 export const CONFIANZA_MINIMA = 0.2;
 
 /** Nombres del orden fijo. Es documentación para quien hace el tracking. */
+// Es EXACTAMENTE el mismo orden que la lista de arriba; acá va como
+// identificadores para que el código y el panel de depuración los usen.
 export const ORDEN_DE_ANCLAS = congelarProfundo([
   "hombro-izquierdo",
   "hombro-derecho",

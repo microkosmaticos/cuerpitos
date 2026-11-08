@@ -17,6 +17,10 @@ import {
   validarFrame,
 } from "../src/model/tracking/TrackingFrame.js";
 import { MockTracker, MODOS } from "../src/input/MockTracker.js";
+import { bornOrganism } from "../src/model/genome/bornOrganism.js";
+import { crearVinculos } from "../src/model/tracking/crearVinculos.js";
+import { LIMITES, OrganismPose } from "../src/model/tracking/OrganismPose.js";
+import { aplicarPose } from "../src/model/tracking/aplicarPose.js";
 
 const reportes = [];
 
@@ -282,6 +286,296 @@ function personaDePrueba(extra = {}) {
   }
 
   comprobar(iguales, "dos mocks con la misma semilla deberían dar frames idénticos");
+}
+
+// ------------------------------------------------------------
+// 3. Vínculo parte ↔ ancla
+// ------------------------------------------------------------
+
+/** Persona con los anchors en una posición dada. */
+function personaConAnclas(x, y, energy = 0.8, extra = {}) {
+  return {
+    id: "p0",
+    present: true,
+    confidence: 0.95,
+    center: { x: 0.5, y: 0.5 },
+    energy,
+    spread: 0.5,
+    anchors: Array.from({ length: CANTIDAD_DE_ANCLAS }, () => ({
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      confidence: 0.95,
+    })),
+    ...extra,
+  };
+}
+
+{
+  const reporte = crearReporte("Vínculo: determinista y sin tocar la identidad");
+  const comprobar = comprobarEn(reporte);
+
+  for (const semilla of [0, 1, 7, 42]) {
+    const organismo = bornOrganism(semilla);
+    const a = crearVinculos(organismo.shape, organismo.seed);
+    const b = crearVinculos(organismo.shape, organismo.seed);
+
+    comprobar(
+      JSON.stringify(a) === JSON.stringify(b),
+      `semilla ${semilla}: los vínculos no son deterministas`
+    );
+
+    // No cambian genoma ni paleta.
+    const otro = bornOrganism(semilla);
+    comprobar(
+      JSON.stringify(organismo.genome) === JSON.stringify(otro.genome),
+      `semilla ${semilla}: el genoma cambió al crear vínculos`
+    );
+    comprobar(
+      JSON.stringify(organismo.palette) === JSON.stringify(otro.palette),
+      `semilla ${semilla}: la paleta cambió al crear vínculos`
+    );
+
+    // La cabeza y el núcleo no tienen ancla.
+    const conCabeza = a.vinculos.some((v) => v.partId === "cabeza");
+    comprobar(!conCabeza, `semilla ${semilla}: la cabeza no debería tener vínculo`);
+
+    const cabezas = organismo.shape.parts.filter((parte) => parte.role === "cabeza");
+    comprobar(cabezas.length === 1, `semilla ${semilla}: debería haber una cabeza`);
+    comprobar(cabezas[0].anchor === null, `semilla ${semilla}: la cabeza no debería tener ancla`);
+  }
+}
+
+{
+  const reporte = crearReporte("Vínculo: anclas válidas y fase");
+  const comprobar = comprobarEn(reporte);
+
+  for (let semilla = 0; semilla < 200; semilla++) {
+    const organismo = bornOrganism(semilla);
+    const { vinculos } = crearVinculos(organismo.shape, organismo.seed);
+
+    for (const vinculo of vinculos) {
+      if (!(vinculo.ancla >= 0 && vinculo.ancla < CANTIDAD_DE_ANCLAS)) {
+        comprobar(false, `semilla ${semilla}: ancla inválida ${vinculo.ancla}`);
+      }
+      if (!(vinculo.ganancia > 0 && vinculo.ganancia < 1)) {
+        comprobar(false, `semilla ${semilla}: ganancia ${vinculo.ganancia}`);
+      }
+      if (!(vinculo.retraso > 0)) {
+        comprobar(false, `semilla ${semilla}: retraso ${vinculo.retraso}`);
+      }
+    }
+  }
+
+  comprobar(true, "las anclas y el temperamento caen en rango");
+}
+
+// ------------------------------------------------------------
+// 4. Pose viva: límites, reposo, suavizado, fps y pérdida
+// ------------------------------------------------------------
+
+function crearPose(semilla) {
+  const organismo = bornOrganism(semilla);
+  const vinculos = crearVinculos(organismo.shape, organismo.seed);
+  const pose = new OrganismPose(organismo.shape, vinculos);
+  return { organismo, vinculos, pose };
+}
+
+{
+  const reporte = crearReporte("Pose: los límites no se superan");
+  const comprobar = comprobarEn(reporte);
+
+  // Entrada extrema: todas las anclas pegadas a una esquina.
+  const { pose } = crearPose(3);
+  const extrema = personaConAnclas(1, 0, 1);
+
+  for (let i = 0; i < 600; i++) pose.update(1 / 60, extrema);
+
+  const maximoAngulo = (LIMITES.angulo * Math.PI) / 180;
+  let dentro = true;
+
+  for (const estado of pose.estado.partes.values()) {
+    if (Math.abs(estado.angulo) > maximoAngulo + 1e-9) dentro = false;
+    if (Math.abs(estado.curvatura) > LIMITES.curvatura + 1e-9) dentro = false;
+    if (estado.escala > 1 + LIMITES.escala + 1e-9 || estado.escala < 1 - LIMITES.escala - 1e-9) dentro = false;
+  }
+
+  comprobar(dentro, "alguna parte superó los límites de deformación");
+
+  const desplazamiento = Math.hypot(pose.estado.posicion.x, pose.estado.posicion.y);
+  comprobar(
+    desplazamiento <= LIMITES.desplazamiento * 2 + 1e-9,
+    `el desplazamiento ${desplazamiento.toFixed(3)} se fue de rango`
+  );
+}
+
+{
+  const reporte = crearReporte("Pose: con energía 0 se asienta");
+  const comprobar = comprobarEn(reporte);
+
+  const { pose } = crearPose(5);
+
+  // Primero se mueve, después se queda quieto.
+  for (let i = 0; i < 120; i++) pose.update(1 / 60, personaConAnclas(0.9, 0.2, 0.9));
+  for (let i = 0; i < 600; i++) pose.update(1 / 60, personaConAnclas(0.9, 0.2, 0));
+
+  let maximo = 0;
+  for (const estado of pose.estado.partes.values()) {
+    maximo = Math.max(maximo, Math.abs(estado.angulo));
+  }
+
+  comprobar(maximo < 0.01, `con energía 0 los ángulos deberían volver a 0 y quedó ${maximo.toFixed(4)}`);
+
+  const antes = JSON.stringify([...pose.estado.partes]);
+  for (let i = 0; i < 60; i++) pose.update(1 / 60, personaConAnclas(0.9, 0.2, 0));
+  const despues = JSON.stringify([...pose.estado.partes]);
+
+  comprobar(antes === despues, "en reposo la pose no debería cambiar");
+}
+
+{
+  const reporte = crearReporte("Pose: un salto no se copia literal");
+  const comprobar = comprobarEn(reporte);
+
+  const { pose, vinculos } = crearPose(9);
+  const primerVinculo = vinculos.vinculos[0];
+
+  // Un paso con el ancla lejos: el ángulo tiene que ser mucho menor
+  // que la desviación real.
+  pose.update(1 / 60, personaConAnclas(1, 0, 1));
+
+  const estado = pose.estado.partes.get(primerVinculo.partId);
+  const desvioReal = (25 * Math.PI) / 180;
+
+  comprobar(
+    Math.abs(estado.angulo) < desvioReal * 0.5,
+    `la parte saltó ${estado.angulo.toFixed(4)} rad en un solo frame`
+  );
+  comprobar(
+    primerVinculo.ganancia < 1,
+    `la ganancia debería ser menor que 1 y es ${primerVinculo.ganancia}`
+  );
+}
+
+{
+  const reporte = crearReporte("Pose: 30 y 60 fps dan lo mismo");
+  const comprobar = comprobarEn(reporte);
+
+  const persona = personaConAnclas(0.85, 0.2, 0.8);
+
+  const treinta = crearPose(11).pose;
+  const sesenta = crearPose(11).pose;
+
+  for (let i = 0; i < 90; i++) treinta.update(1 / 30, persona);
+  for (let i = 0; i < 180; i++) sesenta.update(1 / 60, persona);
+
+  let diferenciaMaxima = 0;
+  for (const [partId, estado] of treinta.estado.partes) {
+    const otro = sesenta.estado.partes.get(partId);
+    diferenciaMaxima = Math.max(diferenciaMaxima, Math.abs(estado.angulo - otro.angulo));
+  }
+
+  comprobar(
+    diferenciaMaxima < 1e-6,
+    `las poses difieren en ${diferenciaMaxima.toExponential(3)} rad`
+  );
+}
+
+{
+  const reporte = crearReporte("Pose: pérdida de señal");
+  const comprobar = comprobarEn(reporte);
+
+  const { pose } = crearPose(13);
+
+  for (let i = 0; i < 60; i++) pose.update(1 / 60, personaConAnclas(0.9, 0.2, 0.9));
+
+  const sinSenal = {
+    id: "p0",
+    present: false,
+    confidence: 0.1,
+    center: { x: 0.5, y: 0.5 },
+    energy: 0,
+    spread: 0,
+    anchors: Array.from({ length: CANTIDAD_DE_ANCLAS }, () => null),
+  };
+
+  for (let i = 0; i < 180; i++) pose.update(1 / 60, sinSenal);
+
+  comprobar(pose.estado.senal < 0.05, `la señal debería caer a casi 0 y quedó ${pose.estado.senal.toFixed(3)}`);
+  comprobar(pose.estado.estadoSenal === "sin-senal", `estado de señal: ${pose.estado.estadoSenal}`);
+  comprobar(pose.shape.parts.length > 0, "el organismo no debería desaparecer");
+}
+
+// ------------------------------------------------------------
+// 5. Jerarquía: el hijo sigue al padre
+// ------------------------------------------------------------
+
+{
+  const reporte = crearReporte("Pose: el antebrazo sigue al brazo");
+  const comprobar = comprobarEn(reporte);
+
+  const problemas = [];
+
+  for (let semilla = 0; semilla < 1000; semilla++) {
+    const organismo = bornOrganism(semilla);
+    const vinculos = crearVinculos(organismo.shape, organismo.seed);
+    const pose = new OrganismPose(organismo.shape, vinculos);
+
+    // Entrada extrema: los brazos se van al tope del límite.
+    const extrema = personaConAnclas(1, 0, 1);
+    for (let i = 0; i < 240; i++) pose.update(1 / 60, extrema);
+
+    const partes = aplicarPose(organismo.shape, pose.estado);
+    const porId = new Map(partes.map((parte) => [parte.id, parte]));
+    const restantes = new Map(organismo.shape.parts.map((parte) => [parte.id, parte]));
+
+    for (const parte of partes) {
+      if (!parte.parent) continue;
+
+      const padre = porId.get(parte.parent);
+      const rest = restantes.get(parte.id);
+      const restPadre = restantes.get(parte.parent);
+      if (!padre || !rest || !restPadre) continue;
+
+      // Vector en reposo y vector deformado, desde el padre.
+      const reposo = {
+        x: rest.origen.x - restPadre.origen.x,
+        y: rest.origen.y - restPadre.origen.y,
+      };
+      const actual = {
+        x: parte.origenActual.x - padre.origenActual.x,
+        y: parte.origenActual.y - padre.origenActual.y,
+      };
+
+      const anguloPadre = pose.estado.partes.get(padre.id)?.angulo ?? 0;
+      const esperado = Math.atan2(reposo.y, reposo.x) + anguloPadre;
+      const obtenido = Math.atan2(actual.y, actual.x);
+
+      let diferencia = Math.abs(obtenido - esperado) % (Math.PI * 2);
+      if (diferencia > Math.PI) diferencia = Math.PI * 2 - diferencia;
+
+      // Tolerancia: 1 % del tamaño de la parte, medido como arco.
+      const tamano = Math.max(
+        ...rest.points.map((punto) =>
+          Math.hypot(punto.x - rest.origen.x, punto.y - rest.origen.y)
+        )
+      );
+      const palanca = Math.max(1e-6, Math.hypot(reposo.x, reposo.y));
+      const tolerancia = (tamano * 0.01) / palanca;
+
+      if (diferencia > tolerancia) {
+        problemas.push(
+          `semilla ${semilla}: ${parte.id} desviado ${diferencia.toFixed(3)} rad (tolerancia ${tolerancia.toFixed(3)})`
+        );
+      }
+    }
+  }
+
+  comprobar(
+    problemas.length === 0,
+    `${problemas.length} uniones rotas -> ${problemas.slice(0, 3).join(" | ")}`
+  );
 }
 
 // ------------------------------------------------------------

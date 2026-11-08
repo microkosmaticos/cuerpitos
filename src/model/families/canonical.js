@@ -105,6 +105,8 @@ export function construirForma(familia, partes) {
       id: slot.id,
       role: slot.role,
       anchor: slot.anchor,
+      // Quién es su padre: sirve para que la pose respete la jerarquía.
+      parent: conexion?.parent ?? null,
       origen,
       points,
       extras,
