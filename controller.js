@@ -1,14 +1,16 @@
 import { CameraModel } from "./camera.js";
 import { BodyPoseModel } from "./bodypose.js";
 import { Pose } from "./pose.js";
+import { ParticipantTracker } from "./participants.js";
 import { SkeletonView } from "./skeleton-view.js";
 import { CONFIG } from "./config.js";
 
 /**
  * Orchestrator.
  *
- * Owns the wiring order (camera -> model -> view) and translates raw
- * detections into view updates. It knows neither ml5 nor p5 APIs.
+ * Wiring order: camera -> detection -> participant lock -> view.
+ * The view never sees raw detections, only the locked participants (plus the
+ * ignored ones for optional debug drawing).
  */
 export class AppController {
   constructor({ container, hud }) {
@@ -16,6 +18,13 @@ export class AppController {
     this.view = new SkeletonView(container);
     this.camera = new CameraModel();
     this.bodyPose = new BodyPoseModel();
+    this.tracker = new ParticipantTracker();
+
+    this.lastResult = {
+      participants: [],
+      ignored: [],
+      session: "SELECTING",
+    };
 
     this.frameCount = 0;
     this.fps = 0;
@@ -28,12 +37,13 @@ export class AppController {
     try {
       await this.camera.start();
       this.view.setVideoSize(this.camera.width, this.camera.height);
+      this.tracker.setFrameSize(this.camera.width, this.camera.height);
 
       this.setStatus("cargando modelo…");
       await this.bodyPose.load();
       this.view.setConnections(this.bodyPose.connections);
 
-      this.setStatus("detectando…");
+      this.setStatus("buscando participantes…");
       this.bodyPose.start(this.camera.video, (poses) => this.onPoses(poses));
     } catch (error) {
       console.error(error);
@@ -43,7 +53,11 @@ export class AppController {
 
   onPoses(rawPoses) {
     const poses = rawPoses.map((raw) => new Pose(raw));
-    this.view.setPoses(poses);
+    const result = this.tracker.update(poses, performance.now());
+    this.lastResult = result;
+
+    this.view.setParticipants(result.participants);
+    this.view.setIgnored(result.ignored);
 
     this.frameCount += 1;
     const now = performance.now();
@@ -53,8 +67,17 @@ export class AppController {
       this.fps = Math.round((this.frameCount * 1000) / elapsed);
       this.frameCount = 0;
       this.fpsStartedAt = now;
-      this.setStatus(`personas: ${poses.length}/${CONFIG.model.maxPoses}  ·  fps: ${this.fps}`);
+      this.setStatus(this.describe(result));
     }
+  }
+
+  describe(result) {
+    const states = result.participants
+      .map((participant) => `P${participant.slotId + 1}:${participant.state}`)
+      .join(" · ");
+
+    const head = `${result.session} · ${result.participants.length}/${CONFIG.participants.maxActive}`;
+    return `${head}${states ? ` · ${states}` : ""}  ·  fps: ${this.fps}`;
   }
 
   setStatus(text, isError = false) {

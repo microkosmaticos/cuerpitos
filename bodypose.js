@@ -43,24 +43,21 @@ export class BodyPoseModel {
     }
 
     this.model.detectStart(video, (poses) => {
-      onPoses(this.limitPoses(poses));
+      onPoses(this.capDetections(poses));
     });
     this.running = true;
   }
 
   /**
-   * Keeps the N most confident people. The installation must never show more
-   * than two organisms, even if a third person walks into frame.
+   * Safety cap only. The detection layer must not decide who participates:
+   * ParticipantTracker owns selection and the two-participant limit.
    */
-  limitPoses(poses) {
-    const max = CONFIG.model.maxPoses;
+  capDetections(poses) {
+    const max = CONFIG.model.maxDetections;
     if (!max || poses.length <= max) return poses;
 
     return [...poses]
-      .sort(
-        (a, b) =>
-          (b.score ?? b.box?.score ?? 0) - (a.score ?? a.box?.score ?? 0)
-      )
+      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
       .slice(0, max);
   }
 

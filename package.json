@@ -1,0 +1,8 @@
+{
+  "name": "cuerpitos",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/participants.test.js"
+  }
+}

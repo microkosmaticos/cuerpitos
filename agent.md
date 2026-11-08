@@ -15,6 +15,17 @@ La instalación utiliza una cámara web para detectar hasta dos personas. A part
 - Si una persona se retira, su organismo desaparecerá mediante una transición.
 - Si vuelve a entrar, nacerá un organismo nuevo, con otra identidad generativa.
 
+### 2.1 Bloqueo de participantes (Participant Lock)
+
+La detección y la selección son capas separadas. MoveNet puede ver más de dos personas; la experiencia solo incorpora a dos.
+
+- **Selección**: se consideran candidatos dentro de una zona central del encuadre, con torso visible y confianza suficiente. El candidato debe mantenerse estable ~1,4 s antes de bloquearse.
+- **Bloqueo**: una vez bloqueados, los dos participantes conservan un `participantId` y un `slotId` estables, independientes del ID efímero de MoveNet. Las personas del fondo no reemplazan a un participante aunque tengan mayor confianza.
+- **Pérdida temporal**: si un participante deja de detectarse, su slot pasa a `LOST` hasta 2 s. Si reaparece en ese tiempo, recupera su identidad y su asociación con el organismo.
+- **Ausencia prolongada**: superada la tolerancia, el slot queda `ABSENT` y reservado. No se asigna a otra persona.
+- **Liberación**: la sesión se libera solo cuando ambos participantes estuvieron ausentes ~6 s. Recién entonces se puede seleccionar una pareja nueva.
+- La lógica vive en `participants.js`, sin p5 ni ml5, y se prueba con `npm test`.
+
 ## 3. Apariencia de los organismos
 - Serán abstractos, orgánicos y generativos.
 - No tendrán que reproducir todas las partes del cuerpo humano.

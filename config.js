@@ -14,8 +14,10 @@ export const CONFIG = {
 
   model: {
     name: "MoveNet",
-    // Hard limit for the installation: at most two people on stage.
-    maxPoses: 2,
+    // Safety cap on raw detections. This is NOT the number of participants:
+    // the model may see more people, and ParticipantTracker decides which two
+    // belong to the experience.
+    maxDetections: 6,
     options: {
       // MULTIPOSE_LIGHTNING detects several people and keeps a stable id per
       // person, which is what the two-person stage will need.
@@ -66,7 +68,8 @@ export const CONFIG = {
       "right_hip",
     ],
 
-    // One colour pair per detected person, cycled by index.
+    // One colour pair per participant slot (0 and 1), so colours stay stable
+    // while a participant moves and even if MoveNet changes their track id.
     palette: [
       { bone: "#5ef2ff", joint: "#c6fbff" },
       { bone: "#ff7bd5", joint: "#ffd0ee" },
@@ -74,5 +77,56 @@ export const CONFIG = {
       { bone: "#ffd166", joint: "#fff0c2" },
       { bone: "#c39bff", joint: "#eadcff" },
     ],
+  },
+
+  participants: {
+    // The experience never shows more than two participants.
+    maxActive: 2,
+
+    // Normalized participation zone. People outside it are not candidates.
+    zone: { xMin: 0.15, xMax: 0.85, yMin: 0, yMax: 1 },
+
+    // A candidate must stay stable this long before being locked.
+    acquireMs: 1400,
+    // How long an unmatched candidate is remembered across id changes.
+    candidateMemoryMs: 700,
+    // Temporary occlusion tolerance per participant.
+    lostGraceMs: 2000,
+    // The session only resets after BOTH participants are gone this long.
+    releaseBothMs: 6000,
+    // Optional per-slot release when one participant stays. Disabled on
+    // purpose: the empty seat stays reserved until the session ends.
+    singleSlotReleaseMs: null,
+    maxCandidates: 4,
+    minPoseScore: 0.25,
+
+    // Reference shoulder-width / frame-width ratios for the size score.
+    sizeMinRatio: 0.08,
+    sizeMaxRatio: 0.35,
+
+    weights: {
+      centrality: 0.4,
+      stability: 0.25,
+      size: 0.2,
+      confidence: 0.15,
+    },
+
+    matching: {
+      // Maximum centre distance, in body scales, from the predicted position.
+      maxCenterDistanceNorm: 1.2,
+      maxScaleRatio: 0.5,
+      maxCost: 0.75,
+      // Stricter threshold for a participant already marked ABSENT.
+      absentMaxCost: 0.6,
+      velocitySmoothing: 0.35,
+      // Maximum predicted speed, in body scales per second.
+      maxVelocityNorm: 3,
+      velocityDecay: 0.85,
+    },
+
+    debug: {
+      // Draw non-participants in grey. Off for the installation.
+      showIgnored: false,
+    },
   },
 };

@@ -3,9 +3,9 @@ import { CONFIG } from "./config.js";
 /**
  * Skeleton renderer.
  *
- * Uses p5 in instance mode so it never pollutes globals. It draws only the
- * detected structure: joints as circles, bones as lines, plus a neck line and
- * a head circle. The webcam image is deliberately not drawn in stage 1.
+ * Draws only the locked participants. Colour is keyed by slotId, so it stays
+ * stable while a participant moves or MoveNet changes their track id.
+ * Non-participants are ignored unless debug.showIgnored is enabled.
  */
 export class SkeletonView {
   constructor(container) {
@@ -16,7 +16,8 @@ export class SkeletonView {
     }
 
     this.container = container;
-    this.poses = [];
+    this.participants = [];
+    this.ignored = [];
     this.connections = [];
     this.videoWidth = 0;
     this.videoHeight = 0;
@@ -48,8 +49,12 @@ export class SkeletonView {
     this.videoHeight = height;
   }
 
-  setPoses(poses) {
-    this.poses = poses ?? [];
+  setParticipants(participants) {
+    this.participants = participants ?? [];
+  }
+
+  setIgnored(poses) {
+    this.ignored = poses ?? [];
   }
 
   /**
@@ -97,58 +102,86 @@ export class SkeletonView {
     return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
+  withAlpha(p, hex, alpha) {
+    const color = p.color(hex);
+    color.setAlpha(alpha * 255);
+    return color;
+  }
+
   render(p) {
     p.background(0);
 
     const transform = this.transform(p);
     if (!transform) return;
 
-    const { minConfidence, keypointRadius, boneWeight, palette } =
-      CONFIG.skeleton;
+    if (CONFIG.participants.debug.showIgnored) {
+      for (const pose of this.ignored) {
+        this.drawPose(
+          p,
+          pose,
+          transform,
+          { bone: "#333333", joint: "#4d4d4d" },
+          0.35,
+          false
+        );
+      }
+    }
 
-    this.poses.forEach((pose, poseIndex) => {
-      const colors = palette[poseIndex % palette.length];
+    for (const participant of this.participants) {
+      if (!participant.pose) continue;
+      if (participant.state === "ABSENT") continue;
 
-      // Bones first so joints sit on top of the line ends.
-      p.stroke(colors.bone);
-      p.strokeWeight(boneWeight);
-      p.noFill();
+      const palette = CONFIG.skeleton.palette;
+      const colors = palette[participant.slotId % palette.length];
+      const alpha = participant.state === "LOST" ? 0.4 : 1;
 
-      for (const [aIndex, bIndex] of this.connections) {
-        const a = pose.keypoints[aIndex];
-        const b = pose.keypoints[bIndex];
-        if (!a || !b) continue;
-        if (!this.upperBody.has(a.name) || !this.upperBody.has(b.name)) {
-          continue;
-        }
-        if (
-          (a.confidence ?? 0) < minConfidence ||
-          (b.confidence ?? 0) < minConfidence
-        ) {
-          continue;
-        }
+      this.drawPose(p, participant.pose, transform, colors, alpha, true);
+    }
+  }
 
-        const start = this.project(a, transform);
-        const end = this.project(b, transform);
-        p.line(start.x, start.y, end.x, end.y);
+  drawPose(p, pose, transform, colors, alpha, drawHead) {
+    const { minConfidence, keypointRadius, boneWeight } = CONFIG.skeleton;
+
+    // Bones first so joints sit on top of the line ends.
+    p.stroke(this.withAlpha(p, colors.bone, alpha));
+    p.strokeWeight(boneWeight);
+    p.noFill();
+
+    for (const [aIndex, bIndex] of this.connections) {
+      const a = pose.keypoints[aIndex];
+      const b = pose.keypoints[bIndex];
+      if (!a || !b) continue;
+      if (!this.upperBody.has(a.name) || !this.upperBody.has(b.name)) {
+        continue;
+      }
+      if (
+        (a.confidence ?? 0) < minConfidence ||
+        (b.confidence ?? 0) < minConfidence
+      ) {
+        continue;
       }
 
-      // Neck + head, drawn between bones and joints.
-      this.drawHead(p, pose, colors, transform);
+      const start = this.project(a, transform);
+      const end = this.project(b, transform);
+      p.line(start.x, start.y, end.x, end.y);
+    }
 
-      // Joints.
-      p.noStroke();
-      p.fill(colors.joint);
+    if (drawHead) {
+      this.drawHead(p, pose, colors, transform, alpha);
+    }
 
-      for (const name of CONFIG.skeleton.upperBody) {
-        const point = pose.get(name);
-        if (!point) continue;
-        if ((point.confidence ?? 0) < minConfidence) continue;
+    // Joints.
+    p.noStroke();
+    p.fill(this.withAlpha(p, colors.joint, alpha));
 
-        const projected = this.project(point, transform);
-        p.circle(projected.x, projected.y, keypointRadius * 2);
-      }
-    });
+    for (const name of CONFIG.skeleton.upperBody) {
+      const point = pose.get(name);
+      if (!point) continue;
+      if ((point.confidence ?? 0) < minConfidence) continue;
+
+      const projected = this.project(point, transform);
+      p.circle(projected.x, projected.y, keypointRadius * 2);
+    }
   }
 
   /**
@@ -156,7 +189,7 @@ export class SkeletonView {
    * head circle. The circle is centred on the ears (falling back to eyes or
    * nose) and scales with the body so every person gets a proportional head.
    */
-  drawHead(p, pose, colors, transform) {
+  drawHead(p, pose, colors, transform, alpha) {
     const head = CONFIG.skeleton.head;
 
     const leftEar = this.visiblePoint(pose, "left_ear");
@@ -177,8 +210,10 @@ export class SkeletonView {
         ? this.midpoint(leftShoulder, rightShoulder)
         : null;
 
-    const earDistance = leftEar && rightEar ? this.distance(leftEar, rightEar) : 0;
-    const eyeDistance = leftEye && rightEye ? this.distance(leftEye, rightEye) : 0;
+    const earDistance =
+      leftEar && rightEar ? this.distance(leftEar, rightEar) : 0;
+    const eyeDistance =
+      leftEye && rightEye ? this.distance(leftEye, rightEye) : 0;
     const shoulderWidth =
       leftShoulder && rightShoulder
         ? this.distance(leftShoulder, rightShoulder)
@@ -206,7 +241,7 @@ export class SkeletonView {
         y: projectedCenter.y + (dy / length) * projectedRadius,
       };
 
-      p.stroke(colors.bone);
+      p.stroke(this.withAlpha(p, colors.bone, alpha));
       p.strokeWeight(head.neckWeight);
       p.line(
         projectedShoulders.x,
@@ -218,12 +253,8 @@ export class SkeletonView {
 
     // Head circle.
     p.noFill();
-    p.stroke(colors.joint);
+    p.stroke(this.withAlpha(p, colors.joint, alpha));
     p.strokeWeight(head.neckWeight);
-    p.circle(
-      projectedCenter.x,
-      projectedCenter.y,
-      projectedRadius * 2
-    );
+    p.circle(projectedCenter.x, projectedCenter.y, projectedRadius * 2);
   }
 }
