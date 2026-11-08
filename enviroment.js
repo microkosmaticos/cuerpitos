@@ -20,6 +20,13 @@
    Parts of the artwork that fall outside the window are simply clipped
    by the canvas, which is the expected behaviour for a "cover" fit.
 
+   The waves layer has a very slow, continuous animation so the scene
+   feels alive without stealing attention: it drifts a few pixels and
+   "breathes" (a 0.3% uniform scale change). It never tilts, stretches
+   or changes shape, and the motion is built from two incommensurate
+   sine periods plus low-frequency Perlin noise, so it never repeats
+   visibly and never jumps.
+
    Lifecycle: this module owns p5's preload/setup/draw/windowResized
    hooks while it is the only sketch on the page. If another module
    later owns the lifecycle, call environmentPreload(),
@@ -82,6 +89,72 @@ function drawBackgroundLayer(layer, rect) {
   image(layer, rect.x, rect.y, rect.w, rect.h);
 }
 
+/* ------------------------------------------------------------------
+   Waves animation
+   ------------------------------------------------------------------
+   All the values are fractions of the drawn rect, so the movement
+   feels identical on any screen size.
+
+   The waves rect is inflated by WAVES_BLEED so that the drift and the
+   breathing can never expose a gap at the window borders. The bleed is
+   larger than the maximum displacement, which keeps the composition
+   visually identical to the original artwork.
+   ------------------------------------------------------------------ */
+
+/** Maximum drift, as a fraction of the drawn layer size. */
+const WAVES_DRIFT = 0.0035;
+
+/** Uniform scale variation (0.3%), the "breathing". */
+const WAVES_BREATH = 0.003;
+
+/** Overscan that absorbs drift + breathing without exposing edges. */
+const WAVES_BLEED = 0.02;
+
+/** Periods in seconds: slow, and deliberately not multiples of each other. */
+const WAVES_DRIFT_PERIOD_X = 2 * Math.PI / 0.13; // ~48 s
+const WAVES_DRIFT_PERIOD_Y = 2 * Math.PI / 0.107; // ~59 s
+const WAVES_BREATH_PERIOD = 2 * Math.PI / 0.09; // ~70 s
+
+/**
+ * Draws the waves layer with its slow floating/breathing motion.
+ *
+ * Two sines with different periods give a long, non-repeating orbit;
+ * low-frequency Perlin noise breaks the mechanical feel of a pure sine.
+ * Both contributions are normalised to a maximum of 1, so the total
+ * displacement never exceeds WAVES_DRIFT.
+ *
+ * @param {p5.Image|null} layer
+ * @param {{x: number, y: number, w: number, h: number}} cover
+ */
+function drawAnimatedWaves(layer, cover) {
+  if (!layer) return;
+
+  // seconds since the sketch started, so the animation is frame-rate
+  // independent and always continuous (no state to reset or drift).
+  const t = millis() / 1000;
+
+  const noiseX = noise(t * 0.05) * 2 - 1;
+  const noiseY = noise(t * 0.05 + 97.3) * 2 - 1;
+
+  const offsetX =
+    (Math.sin((t / WAVES_DRIFT_PERIOD_X) * 2 * Math.PI) * 0.55 + noiseX * 0.45) *
+    (cover.w * WAVES_DRIFT);
+
+  const offsetY =
+    (Math.cos((t / WAVES_DRIFT_PERIOD_Y) * 2 * Math.PI) * 0.55 + noiseY * 0.45) *
+    (cover.h * WAVES_DRIFT);
+
+  const breath = 1 + Math.sin((t / WAVES_BREATH_PERIOD) * 2 * Math.PI) * WAVES_BREATH;
+
+  const w = cover.w * (1 + WAVES_BLEED) * breath;
+  const h = cover.h * (1 + WAVES_BLEED) * breath;
+
+  const centerX = cover.x + cover.w / 2 + offsetX;
+  const centerY = cover.y + cover.h / 2 + offsetY;
+
+  image(layer, centerX - w / 2, centerY - h / 2, w, h);
+}
+
 /** Loads the three background artworks. */
 function environmentPreload() {
   backgroundLayers.base = loadImage(BACKGROUND_ASSETS.base);
@@ -101,7 +174,7 @@ function environmentDraw() {
 
   const rect = backgroundCoverRect();
   drawBackgroundLayer(backgroundLayers.base, rect);
-  drawBackgroundLayer(backgroundLayers.waves, rect);
+  drawAnimatedWaves(backgroundLayers.waves, rect);
   drawBackgroundLayer(backgroundLayers.stars, rect);
 }
 
