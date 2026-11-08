@@ -20,12 +20,10 @@
    Parts of the artwork that fall outside the window are simply clipped
    by the canvas, which is the expected behaviour for a "cover" fit.
 
-   The waves layer has a very slow, continuous animation so the scene
-   feels alive without stealing attention: it drifts a few pixels and
-   "breathes" (a 0.3% uniform scale change). It never tilts, stretches
-   or changes shape, and the motion is built from two incommensurate
-   sine periods plus low-frequency Perlin noise, so it never repeats
-   visibly and never jumps.
+   The waves layer is itself undulating: it is drawn as narrow vertical
+   strips, each one slightly shifted vertically, so the original drawing
+   flows like water (see the "Waves animation" section below). Nothing
+   is re-drawn or reshaped: every strip samples the artwork itself.
 
    Lifecycle: this module owns p5's preload/setup/draw/windowResized
    hooks while it is the only sketch on the page. If another module
@@ -49,6 +47,14 @@ const BACKGROUND_ASSETS = {
   waves: "fondo-ondas.png",
   stars: "fondo-estrellas.png",
 };
+
+/**
+ * The base artwork has a ~1 px transparent border of its own: its SVG
+ * clip path stops just before the artboard edge. Growing the layer a
+ * little pushes that edge outside the viewport, so no fallback colour
+ * is ever visible at the screen border.
+ */
+const BASE_BLEED = 0.01;
 
 /** Loaded p5.Image instances, one per layer. */
 const backgroundLayers = {
@@ -89,39 +95,99 @@ function drawBackgroundLayer(layer, rect) {
   image(layer, rect.x, rect.y, rect.w, rect.h);
 }
 
+/**
+ * Grows a rect around its own center by `bleed` (a fraction of its size).
+ * Used to push a layer's transparent border outside the viewport.
+ *
+ * @param {{x: number, y: number, w: number, h: number}} rect
+ * @param {number} bleed
+ * @returns {{x: number, y: number, w: number, h: number}}
+ */
+function inflateRect(rect, bleed) {
+  const padX = (rect.w * bleed) / 2;
+  const padY = (rect.h * bleed) / 2;
+
+  return {
+    x: rect.x - padX,
+    y: rect.y - padY,
+    w: rect.w + padX * 2,
+    h: rect.h + padY * 2,
+  };
+}
+
 /* ------------------------------------------------------------------
    Waves animation
    ------------------------------------------------------------------
-   All the values are fractions of the drawn rect, so the movement
-   feels identical on any screen size.
+   The artwork is undulated slice by slice: the layer is drawn as a row
+   of vertical strips, and each strip is shifted vertically by a smooth
+   travelling wave built from two sines plus low-frequency Perlin noise.
+   Every strip samples the original artwork, so the drawing itself is
+   preserved - nothing is re-drawn, stretched or reshaped - it simply
+   flows like water.
 
-   The waves rect is inflated by WAVES_BLEED so that the drift and the
-   breathing can never expose a gap at the window borders. The bleed is
-   larger than the maximum displacement, which keeps the composition
-   visually identical to the original artwork.
+   The strips tile horizontally with integer bounds, so there are no
+   seams; the only thing that changes between neighbours is the
+   sub-pixel vertical offset, which is invisible.
+
+   All magnitudes are fractions of the drawn layer, so the effect looks
+   the same on any screen size.
    ------------------------------------------------------------------ */
 
-/** Maximum drift, as a fraction of the drawn layer size. */
-const WAVES_DRIFT = 0.0035;
+/** Strip width in canvas pixels; the strip count adapts to the window width. */
+const WAVES_STRIP_WIDTH = 8;
 
-/** Uniform scale variation (0.3%), the "breathing". */
-const WAVES_BREATH = 0.003;
+/** Safety limits for the adaptive strip count. */
+const WAVES_MIN_STRIPS = 96;
+const WAVES_MAX_STRIPS = 360;
 
-/** Overscan that absorbs drift + breathing without exposing edges. */
-const WAVES_BLEED = 0.02;
+/** Wave height, as a fraction of the layer height (~11 px on a 900 tall window). */
+const WAVES_AMPLITUDE = 0.012;
+
+/** Slow swell: the wave height breathes +/- 25% of itself. */
+const WAVES_AMPLITUDE_SWING = 0.25;
+
+/** Overscan around the layer: always greater than the maximum offset. */
+const WAVES_BLEED = 0.04;
 
 /** Periods in seconds: slow, and deliberately not multiples of each other. */
-const WAVES_DRIFT_PERIOD_X = 2 * Math.PI / 0.13; // ~48 s
-const WAVES_DRIFT_PERIOD_Y = 2 * Math.PI / 0.107; // ~59 s
-const WAVES_BREATH_PERIOD = 2 * Math.PI / 0.09; // ~70 s
+const WAVES_PRIMARY_PERIOD = 31;
+const WAVES_SECONDARY_PERIOD = 47;
+const WAVES_SWELL_PERIOD = 26;
+
+/** Weights of the three wave components; they add up to 1. */
+const WAVES_PRIMARY_WEIGHT = 0.55;
+const WAVES_SECONDARY_WEIGHT = 0.3;
+const WAVES_NOISE_WEIGHT = 0.15;
 
 /**
- * Draws the waves layer with its slow floating/breathing motion.
+ * Vertical offset of a strip, in pixels.
  *
- * Two sines with different periods give a long, non-repeating orbit;
- * low-frequency Perlin noise breaks the mechanical feel of a pure sine.
- * Both contributions are normalised to a maximum of 1, so the total
- * displacement never exceeds WAVES_DRIFT.
+ * `u` is the horizontal position across the layer (0 = left, 1 = right)
+ * and `t` the elapsed time in seconds. Two travelling sines with
+ * different speeds and wavelengths produce a wave that never visibly
+ * repeats; the noise term adds an organic, non-mechanical wobble.
+ *
+ * @param {number} u
+ * @param {number} t
+ * @param {number} amplitude
+ * @returns {number}
+ */
+function wavesVerticalOffset(u, t, amplitude) {
+  const primary =
+    Math.sin(u * Math.PI * 2 * 1.15 + (t / WAVES_PRIMARY_PERIOD) * Math.PI * 2) *
+    WAVES_PRIMARY_WEIGHT;
+
+  const secondary =
+    Math.sin(u * Math.PI * 2 * 2.6 - (t / WAVES_SECONDARY_PERIOD) * Math.PI * 2 + 1.7) *
+    WAVES_SECONDARY_WEIGHT;
+
+  const organic = (noise(u * 2.2 + 7.5, t * 0.05) - 0.5) * 2 * WAVES_NOISE_WEIGHT;
+
+  return (primary + secondary + organic) * amplitude;
+}
+
+/**
+ * Draws the waves layer undulating over its original design.
  *
  * @param {p5.Image|null} layer
  * @param {{x: number, y: number, w: number, h: number}} cover
@@ -133,26 +199,40 @@ function drawAnimatedWaves(layer, cover) {
   // independent and always continuous (no state to reset or drift).
   const t = millis() / 1000;
 
-  const noiseX = noise(t * 0.05) * 2 - 1;
-  const noiseY = noise(t * 0.05 + 97.3) * 2 - 1;
+  const swell = 1 + Math.sin((t / WAVES_SWELL_PERIOD) * Math.PI * 2) * WAVES_AMPLITUDE_SWING;
+  const amplitude = cover.h * WAVES_AMPLITUDE * swell;
 
-  const offsetX =
-    (Math.sin((t / WAVES_DRIFT_PERIOD_X) * 2 * Math.PI) * 0.55 + noiseX * 0.45) *
-    (cover.w * WAVES_DRIFT);
+  // the layer is drawn slightly larger than the screen so that the
+  // vertical offsets can never expose an edge at the window borders
+  const area = inflateRect(cover, WAVES_BLEED);
+  const left = area.x;
+  const top = area.y;
+  const width = area.w;
+  const height = area.h;
 
-  const offsetY =
-    (Math.cos((t / WAVES_DRIFT_PERIOD_Y) * 2 * Math.PI) * 0.55 + noiseY * 0.45) *
-    (cover.h * WAVES_DRIFT);
+  const strips = constrain(
+    Math.round(width / WAVES_STRIP_WIDTH),
+    WAVES_MIN_STRIPS,
+    WAVES_MAX_STRIPS
+  );
+  const step = width / strips;
 
-  const breath = 1 + Math.sin((t / WAVES_BREATH_PERIOD) * 2 * Math.PI) * WAVES_BREATH;
+  for (let i = 0; i < strips; i++) {
+    // integer bounds: adjacent strips share the exact same edge, so no seams
+    const x0 = Math.round(left + i * step);
+    const x1 = Math.round(left + (i + 1) * step);
+    const stripWidth = x1 - x0;
+    if (stripWidth <= 0) continue;
 
-  const w = cover.w * (1 + WAVES_BLEED) * breath;
-  const h = cover.h * (1 + WAVES_BLEED) * breath;
+    const u = (x0 + stripWidth / 2 - left) / width;
+    const offset = wavesVerticalOffset(u, t, amplitude);
 
-  const centerX = cover.x + cover.w / 2 + offsetX;
-  const centerY = cover.y + cover.h / 2 + offsetY;
+    // sample the matching columns of the original artwork
+    const sx = ((x0 - left) / width) * layer.width;
+    const sw = (stripWidth / width) * layer.width;
 
-  image(layer, centerX - w / 2, centerY - h / 2, w, h);
+    image(layer, x0, top + offset, stripWidth, height, sx, 0, sw, layer.height);
+  }
 }
 
 /** Loads the three background artworks. */
@@ -173,7 +253,7 @@ function environmentDraw() {
   background(BACKGROUND_COLOR);
 
   const rect = backgroundCoverRect();
-  drawBackgroundLayer(backgroundLayers.base, rect);
+  drawBackgroundLayer(backgroundLayers.base, inflateRect(rect, BASE_BLEED));
   drawAnimatedWaves(backgroundLayers.waves, rect);
   drawBackgroundLayer(backgroundLayers.stars, rect);
 }
