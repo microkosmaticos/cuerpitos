@@ -38,6 +38,8 @@ new p5((p) => {
       controlador.accionarTeclaEspacio();
     } else if (p.key === "g" || p.key === "G") {
       controlador.alternarVista();
+    } else if (p.key === "f" || p.key === "F") {
+      controlador.cambiarFondo();
     }
   };
 });

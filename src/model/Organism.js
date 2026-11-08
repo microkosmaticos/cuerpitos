@@ -19,13 +19,15 @@ export class Organism {
    * @param {string} datos.familyId familia de la que nació
    * @param {number} datos.seed semilla que lo generó
    * @param {object} datos.genome genoma congelado
+   * @param {object} datos.palette paleta congelada
    * @param {object} datos.shape forma ya construida (con puntos)
    */
-  constructor({ id, familyId, seed, genome, shape }) {
+  constructor({ id, familyId, seed, genome, palette, shape }) {
     this.id = id;
     this.familyId = familyId;
     this.seed = seed;
     this.genome = genome;
+    this.palette = palette;
     this.shape = shape;
 
     // Nadie puede cambiar sus proporciones después de nacer.

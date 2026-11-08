@@ -13,6 +13,7 @@ import { FamilyRegistry } from "../FamilyRegistry.js";
 import { SeededRandom } from "../random/SeededRandom.js";
 import { construirForma } from "../families/canonical.js";
 import { Organism } from "../Organism.js";
+import { createPalette } from "../palette/createPalette.js";
 import { createGenome } from "./createGenome.js";
 
 /**
@@ -31,6 +32,7 @@ export function bornOrganism(seed) {
   const familia = rng.pick(FamilyRegistry.listFamilies());
 
   const genome = createGenome(familia, semilla);
+  const palette = createPalette(familia.id, semilla);
   const shape = construirForma(familia, genome.parts);
 
   return new Organism({
@@ -38,6 +40,7 @@ export function bornOrganism(seed) {
     familyId: familia.id,
     seed: semilla,
     genome,
+    palette,
     shape,
   });
 }

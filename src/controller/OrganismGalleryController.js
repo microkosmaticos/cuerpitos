@@ -45,6 +45,11 @@ export class OrganismGalleryController {
     return this.modo === "seis";
   }
 
+  /** Cambia el fondo de prueba: oscuro, medio o cámara simulada. */
+  cambiarFondo() {
+    this.view.cambiarFondo();
+  }
+
   /** Se llama una vez por frame. */
   render() {
     if (this.modo === "seis") {
