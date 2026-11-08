@@ -25,7 +25,6 @@ export class EscenarioView {
     this.fondo = "oscuro";
     this.mostrarDepuracion = true;
     this.mostrarEventos = false;
-    this.transformacion = null;
   }
 
   cambiarFondo() {
@@ -52,19 +51,19 @@ export class EscenarioView {
     const columnas = Math.max(1, items.length);
     const ancho = p.width / columnas;
 
+    this.pantallas = new Map();
+    this.partesPorOrganismo = new Map();
+
     items.forEach((item, indice) => {
       this.dibujarOrganismo(item, indice * ancho, 0, ancho, p.height);
     });
 
-    const persona = frame?.persons[0] ?? null;
-
-    if (this.mostrarDepuracion && items.length > 0 && persona) {
+    if (this.mostrarDepuracion && items.length > 0) {
       dibujarDepuracion(p, {
         frame,
-        persona,
-        partes: this.ultimasPartes ?? [],
-        vinculos: items[0].vinculos,
-        aPantalla: (punto) => this.aPantalla(punto),
+        items,
+        partesPorOrganismo: this.partesPorOrganismo,
+        pantallas: this.pantallas,
       });
     }
 
@@ -88,21 +87,19 @@ export class EscenarioView {
 
     const centroX = x + ancho / 2 + item.pose.posicion.x * p.width;
     const centroY = y + alto / 2 + item.pose.posicion.y * p.height;
+    const escala = ajuste.escala * escalaPresencia;
 
-    this.transformacion = {
-      centroX,
-      centroY,
-      escala: ajuste.escala * escalaPresencia,
-      formaCentroX: ajuste.centroX,
-      formaCentroY: ajuste.centroY,
-    };
+    this.pantallas.set(item.organismo.id, (punto) => ({
+      x: centroX + (punto.x - ajuste.centroX) * escala,
+      y: centroY + (punto.y - ajuste.centroY) * escala,
+    }));
 
     const partes = aplicarPose(forma, item.pose);
-    this.ultimasPartes = partes;
+    this.partesPorOrganismo.set(item.organismo.id, partes);
 
     p.push();
     p.translate(centroX, centroY);
-    p.scale(ajuste.escala * escalaPresencia);
+    p.scale(escala);
     p.translate(-ajuste.centroX, -ajuste.centroY);
 
     const ordenadas = [...partes].sort((a, b) => pesoDeDibujo(a) - pesoDeDibujo(b));
@@ -181,17 +178,6 @@ export class EscenarioView {
     }
 
     ctx.globalAlpha = 1;
-  }
-
-  /** Convierte un punto del espacio de la forma a píxeles de pantalla. */
-  aPantalla(punto) {
-    const t = this.transformacion;
-    if (!t) return { x: 0, y: 0 };
-
-    return {
-      x: t.centroX + (punto.x - t.formaCentroX) * t.escala,
-      y: t.centroY + (punto.y - t.formaCentroY) * t.escala,
-    };
   }
 
   // ------------------------------------------------------------
@@ -278,7 +264,7 @@ export class EscenarioView {
     p.fill(255, 255, 255, 120);
     p.textSize(12);
     p.text(
-      "1–5 modo      D depuración      E eventos      F fondo      ESPACIO nueva semilla",
+      "1–8 modo      D depuración      E eventos      F fondo      ESPACIO reiniciar",
       24,
       p.height - 26
     );

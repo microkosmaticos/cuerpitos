@@ -645,6 +645,86 @@ function crearPose(semilla) {
   );
 }
 
+{
+  const reporte = crearReporte("Mock: modos nuevos");
+  const comprobar = comprobarEn(reporte);
+
+  for (const modo of ["entra-y-sale", "parpadeo", "dos-escalonado"]) {
+    const mock = new MockTracker({ modo, semilla: 4 });
+    const frame = mock.update(1 / 60);
+
+    comprobar(
+      JSON.stringify(validarFrame(frame)) === JSON.stringify(frame),
+      `modo "${modo}": el frame no es válido`
+    );
+  }
+}
+
+{
+  const reporte = crearReporte("Mock: entra y sale");
+  const comprobar = comprobarEn(reporte);
+
+  const mock = new MockTracker({ modo: "entra-y-sale", semilla: 4 });
+  let huboAusencia = false;
+  let huboPresencia = false;
+
+  for (let i = 0; i < 60 * 12; i++) {
+    const frame = mock.update(1 / 60);
+    const persona = frame.persons[0];
+    if (persona.present) huboPresencia = true;
+    else huboAusencia = true;
+  }
+
+  comprobar(huboPresencia, "debería estar presente en algún momento");
+  comprobar(huboAusencia, "debería estar ausente en algún momento");
+}
+
+{
+  const reporte = crearReporte("Mock: parpadeo");
+  const comprobar = comprobarEn(reporte);
+
+  const mock = new MockTracker({ modo: "parpadeo", semilla: 4 });
+  let ausencias = 0;
+  let duracionMaxima = 0;
+  let duracionActual = 0;
+
+  for (let i = 0; i < 60 * 6; i++) {
+    const frame = mock.update(1 / 60);
+    if (frame.persons[0].present) {
+      duracionActual = 0;
+    } else {
+      ausencias++;
+      duracionActual += 1 / 60;
+      duracionMaxima = Math.max(duracionMaxima, duracionActual);
+    }
+  }
+
+  comprobar(ausencias > 0, "debería haber cortes de señal");
+  comprobar(
+    duracionMaxima < 1.2,
+    `cada corte debería durar menos que la gracia y duró ${duracionMaxima.toFixed(2)} s`
+  );
+}
+
+{
+  const reporte = crearReporte("Mock: dos escalonado");
+  const comprobar = comprobarEn(reporte);
+
+  const mock = new MockTracker({ modo: "dos-escalonado", semilla: 4 });
+  let dosPresentes = 0;
+  let unaPresente = 0;
+
+  for (let i = 0; i < 60 * 12; i++) {
+    const frame = mock.update(1 / 60);
+    const presentes = frame.persons.filter((persona) => persona.present).length;
+    if (presentes === 2) dosPresentes++;
+    if (presentes === 1) unaPresente++;
+  }
+
+  comprobar(dosPresentes > 0, "en algún momento debería haber dos personas");
+  comprobar(unaPresente > 0, "en algún momento debería haber una sola");
+}
+
 // ------------------------------------------------------------
 // Salida
 // ------------------------------------------------------------

@@ -13,7 +13,16 @@ import { MockTracker } from "./input/MockTracker.js";
 import { EscenarioView } from "./view/EscenarioView.js";
 import { EscenarioController } from "./controller/EscenarioController.js";
 
-const MODOS = ["raton", "lissajous", "dos", "quieto", "perdida"];
+const MODOS = [
+  "raton",
+  "lissajous",
+  "dos",
+  "quieto",
+  "perdida",
+  "entra-y-sale",
+  "parpadeo",
+  "dos-escalonado",
+];
 
 const parametros = new URLSearchParams(window.location.search);
 const semillaInicial = parametros.get("seed") ?? null;
@@ -66,7 +75,7 @@ new p5((p) => {
   };
 
   p.keyPressed = () => {
-    if (p.key >= "1" && p.key <= "5") {
+    if (p.key >= "1" && p.key <= "8") {
       controlador.tracker.setModo(MODOS[Number(p.key) - 1]);
     } else if (p.key === "d" || p.key === "D") {
       vista.alternarDepuracion();

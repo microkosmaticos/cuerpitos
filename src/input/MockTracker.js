@@ -23,7 +23,16 @@
 import { SeededRandom } from "../model/random/SeededRandom.js";
 import { validarFrame } from "../model/tracking/TrackingFrame.js";
 
-export const MODOS = ["raton", "lissajous", "dos", "quieto", "perdida"];
+export const MODOS = [
+  "raton",
+  "lissajous",
+  "dos",
+  "quieto",
+  "perdida",
+  "entra-y-sale",
+  "parpadeo",
+  "dos-escalonado",
+];
 
 const SEGUNDOS_HASTA_PERDER = 3;
 const CONSTANTE_DEL_RATON = 0.12; // segundos: cuánto tarda en alcanzar el cursor
@@ -94,9 +103,65 @@ export class MockTracker {
         return [this.personaQuieta("p0")];
       case "perdida":
         return [this.personaQueSePierde()];
+      case "entra-y-sale":
+        return [this.personaEntraYSale()];
+      case "parpadeo":
+        return [this.personaParpadeo()];
+      case "dos-escalonado":
+        return this.personasEscalonadas();
       default:
         return [this.personaLissajous("p0", this.faseA, 1)];
     }
+  }
+
+  /** Apaga una persona: presente false, sin anchors y sin energía. */
+  apagar(persona) {
+    return {
+      ...persona,
+      present: false,
+      confidence: 0.1,
+      energy: 0,
+      anchors: persona.anchors.map(() => null),
+    };
+  }
+
+  /**
+   * Entra, se queda, se va y vuelve. Ciclo de 12 segundos:
+   *   0–1  ausente · 1–5 presente · 5–9 ausente · 9–12 presente
+   */
+  personaEntraYSale() {
+    const t = this.tiempo % 12;
+    const persona = this.personaLissajous("p0", this.faseA, 1);
+    const presente = (t >= 1 && t < 5) || t >= 9;
+
+    return presente ? persona : this.apagar(persona);
+  }
+
+  /**
+   * Presente casi siempre, pero la señal se corta 0.25 s cada 1.5 s.
+   * Sirve para probar que la gracia evita el parpadeo.
+   */
+  personaParpadeo() {
+    const t = this.tiempo % 1.5;
+    const persona = this.personaLissajous("p0", this.faseA, 1);
+
+    return t < 1.25 ? persona : this.apagar(persona);
+  }
+
+  /**
+   * Dos personas escalonadas. Ciclo de 12 segundos:
+   *   p0 presente de 1 a 11 · p1 presente de 4 a 8
+   */
+  personasEscalonadas() {
+    const t = this.tiempo % 12;
+
+    const p0 = this.personaLissajous("p0", this.faseA, 1);
+    const p1 = this.personaLissajous("p1", this.faseB, -1);
+
+    return [
+      t >= 1 && t < 11 ? p0 : this.apagar(p0),
+      t >= 4 && t < 8 ? p1 : this.apagar(p1),
+    ];
   }
 
   /** Persona que se mueve en curvas suaves. */

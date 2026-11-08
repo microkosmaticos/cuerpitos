@@ -17,6 +17,7 @@ import path from "node:path";
 import { OrganismManager, PASO_FIJO } from "../src/model/lifecycle/OrganismManager.js";
 import { ESTADOS } from "../src/model/lifecycle/estados.js";
 import { CICLO } from "../src/config/ciclo.js";
+import { MockTracker } from "../src/input/MockTracker.js";
 
 const reportes = [];
 
@@ -329,6 +330,13 @@ function primerEvento(eventos, tipo) {
     resultado.ultimo.pendientes.every((pendiente) => pendiente.personaId !== "p2"),
     "la tercera persona debería ignorarse"
   );
+
+  // Dos organismos simultáneos no comparten familia de paleta.
+  const paletas = resultado.ultimo.organismos.map((item) => item.organismo.palette.familyId);
+  comprobar(
+    paletas.length === 2 && paletas[0] !== paletas[1],
+    `las paletas simultáneas deberían ser distintas y son ${paletas.join(", ")}`
+  );
 }
 
 // ------------------------------------------------------------
@@ -517,6 +525,82 @@ function primerEvento(eventos, tipo) {
       tipos[2] === "desaparecio",
     `orden incorrecto: ${tipos.join(" → ")}`
   );
+}
+
+// ------------------------------------------------------------
+// 13. Casos límite
+// ------------------------------------------------------------
+
+{
+  const reporte = crearReporte("Cambio brusco de id");
+  const comprobar = comprobarEn(reporte);
+
+  const gestor = new OrganismManager({ fuenteDeSemillas: fuenteDeSemillas(11000) });
+
+  correr(gestor, frameDe([persona("p0")]), 1 / 60, 3);
+  const idViejo = gestor.espacios[0]?.organismo.id;
+
+  comprobar(Boolean(idViejo), "debería existir el organismo de p0");
+
+  // Cambia el id sin transición: p0 se va y p1 aparece.
+  const resultado = correr(
+    gestor,
+    frameDe([persona("p1")]),
+    1 / 60,
+    CICLO.gracia + CICLO.desaparicion + CICLO.confirmacion + 0.4
+  );
+
+  comprobar(
+    !resultado.ultimo.organismos.some((item) => item.organismo.id === idViejo),
+    "el organismo viejo debería haber desaparecido"
+  );
+
+  const nuevo = resultado.ultimo.organismos.find((item) => item.personaId === "p1");
+  comprobar(Boolean(nuevo), "p1 debería tener su organismo nuevo");
+  comprobar(nuevo && nuevo.organismo.id !== idViejo, "el organismo nuevo debería ser distinto");
+}
+
+{
+  const reporte = crearReporte("Confianza en el límite");
+  const comprobar = comprobarEn(reporte);
+
+  const gestor = new OrganismManager({ fuenteDeSemillas: fuenteDeSemillas(12000) });
+
+  correr(gestor, frameDe([persona("p0")]), 1 / 60, 3);
+
+  // Presente, pero con la confianza por debajo del umbral de nacimiento.
+  const resultado = correr(
+    gestor,
+    frameDe([persona("p0", { confianza: 0.2 })]),
+    1 / 60,
+    CICLO.gracia + 0.5
+  );
+
+  const organismo = resultado.ultimo.organismos[0];
+  comprobar(Boolean(organismo), "el organismo no debería desaparecer por baja confianza");
+  comprobar(
+    organismo && organismo.estado === ESTADOS.VIVO,
+    `debería seguir vivo y está en ${organismo?.estado}`
+  );
+}
+
+{
+  const reporte = crearReporte("Ciclo completo con el mock");
+  const comprobar = comprobarEn(reporte);
+
+  const tracker = new MockTracker({ modo: "entra-y-sale", semilla: 3 });
+  const gestor = new OrganismManager({ fuenteDeSemillas: fuenteDeSemillas(13000) });
+
+  const eventos = [];
+  for (let i = 0; i < 60 * 15; i++) {
+    const frame = tracker.update(1 / 60);
+    eventos.push(...gestor.update(1 / 60, frame).eventos);
+  }
+
+  const tipos = eventos.map((evento) => evento.tipo);
+  comprobar(tipos.includes("nacio"), "debería haber nacido un organismo");
+  comprobar(tipos.includes("desaparecio"), "debería haber desaparecido");
+  comprobar(gestor.espacios.length <= 2, "nunca debería haber más de dos");
 }
 
 // ------------------------------------------------------------
