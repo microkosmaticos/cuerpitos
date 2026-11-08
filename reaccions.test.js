@@ -27,6 +27,10 @@ const {
   OrganismState,
   Emitter,
   Reacciones,
+  Weights,
+  weightedPick,
+  getEligibleEvents,
+  BehaviorEngine,
 } = require('./reaccions.js');
 
 // ---------------------------------------------------------------------------
@@ -663,5 +667,379 @@ describe('Estado desmayado bloquea acciones', () => {
     const org = new OrganismState('org-1');
     org.setEmotion('nauseous');
     assert.doesNotThrow(() => org.startEvent('faint', { duration: 1000 }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B03.1 — Weights (pesos configurables)
+// ---------------------------------------------------------------------------
+
+describe('B03.1 — Weights (pesos configurables)', () => {
+  it('usa peso uniforme 1 por defecto', () => {
+    const weights = new Weights();
+    assert.equal(weights.get('cualquier-id'), 1);
+  });
+
+  it('set/get guarda y devuelve el peso', () => {
+    const weights = new Weights();
+    weights.set('hug', 2);
+    assert.equal(weights.get('hug'), 2);
+  });
+
+  it('acepta peso 0 como válido (significa "nunca elegir")', () => {
+    const weights = new Weights();
+    assert.doesNotThrow(() => weights.set('faint', 0));
+    assert.equal(weights.get('faint'), 0);
+  });
+
+  it('setAll carga varios pesos de una vez', () => {
+    const weights = new Weights({ hug: 2, kiss: 3 });
+    assert.equal(weights.get('hug'), 2);
+    assert.equal(weights.get('kiss'), 3);
+    assert.equal(weights.get('punch'), 1, 'sin declarar usa el default');
+  });
+
+  it('rechaza pesos inválidos (negativos, NaN, infinito)', () => {
+    const weights = new Weights();
+    assert.throws(() => weights.set('hug', -1), /Peso inv/);
+    assert.throws(() => weights.set('hug', NaN), /Peso inv/);
+    assert.throws(() => weights.set('hug', Infinity), /Peso inv/);
+  });
+
+  it('rechaza ids inválidos (vacío o no string)', () => {
+    const weights = new Weights();
+    assert.throws(() => weights.set('', 1), /id/);
+    assert.throws(() => weights.set(123, 1), /id/);
+  });
+
+  it('delete vuelve al peso por defecto', () => {
+    const weights = new Weights();
+    weights.set('hug', 2);
+    weights.delete('hug');
+    assert.equal(weights.get('hug'), 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B03.1 — weightedPick (selección ponderada)
+// ---------------------------------------------------------------------------
+
+describe('B03.1 — weightedPick (selección ponderada)', () => {
+  it('devuelve null con lista vacía', () => {
+    assert.equal(weightedPick([], () => 1), null);
+  });
+
+  it('devuelve null si todos los pesos son 0', () => {
+    assert.equal(weightedPick(['a', 'b'], () => 0), null);
+  });
+
+  it('respeta los pesos relativos (random determinista)', () => {
+    const getWeight = (id) => ({ a: 1, b: 2, c: 3 }[id]);
+    const candidates = ['a', 'b', 'c'];
+    // total = 6 → roll = random() * 6
+    assert.equal(weightedPick(candidates, getWeight, () => 0), 'a');
+    assert.equal(weightedPick(candidates, getWeight, () => 0.2), 'b');
+    assert.equal(weightedPick(candidates, getWeight, () => 0.5), 'c');
+    assert.equal(weightedPick(candidates, getWeight, () => 0.99), 'c');
+  });
+
+  it('nunca elige un candidato con peso 0', () => {
+    const getWeight = (id) => (id === 'zero' ? 0 : 1);
+    const candidates = ['zero', 'one', 'two'];
+    for (let i = 0; i < 20; i++) {
+      const picked = weightedPick(candidates, getWeight, () => i / 20);
+      assert.notEqual(picked, 'zero');
+    }
+  });
+
+  it('lanza error con pesos inválidos (negativos o no numéricos)', () => {
+    assert.throws(() => weightedPick(['a'], () => -1), /Peso inv/);
+    assert.throws(() => weightedPick(['a'], () => NaN), /Peso inv/);
+    assert.throws(() => weightedPick(['a'], () => Infinity), /Peso inv/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B03.2 — getEligibleEvents (eventos elegibles)
+// ---------------------------------------------------------------------------
+
+describe('B03.2 — getEligibleEvents (eventos elegibles)', () => {
+  it('devuelve eventos individuales elegibles para un organismo neutral y ocioso', () => {
+    const org = new OrganismState('org-1');
+    const eligible = getEligibleEvents({ self: org, other: null, relationship: null }, 0);
+    assert.ok(eligible.includes('limb_stretch'), 'limb_stretch: disponible y extremidad libre');
+    assert.ok(!eligible.includes('faint'), 'faint requiere nauseous');
+    assert.ok(!eligible.includes('shake'), 'shake requiere fainted/euphoric');
+    assert.ok(!eligible.includes('euphoric_burst'), 'euphoric_burst requiere euphoric');
+    assert.ok(!eligible.includes('hug'), 'hug requiere compañero');
+    assert.ok(!eligible.includes('kiss'), 'kiss requiere compañero');
+  });
+
+  it('un organismo ocupado no tiene eventos elegibles', () => {
+    const org = new OrganismState('org-1');
+    org.startEvent('faint', { duration: 1000 });
+    const eligible = getEligibleEvents({ self: org, other: null, relationship: null }, 0);
+    assert.deepEqual(eligible, []);
+  });
+
+  it('un organismo en cooldown no tiene eventos elegibles', () => {
+    const org = new OrganismState('org-1');
+    org.startCooldown(1000, 0);
+    const eligible = getEligibleEvents({ self: org, other: null, relationship: null }, 500);
+    assert.deepEqual(eligible, []);
+  });
+
+  it('un organismo desmayado solo puede recuperarse con shake', () => {
+    const org = new OrganismState('org-1');
+    org.setEmotion('fainted');
+    const eligible = getEligibleEvents({ self: org, other: null, relationship: null }, 0);
+    assert.deepEqual(eligible, ['shake']);
+  });
+
+  it('las condiciones no cumplidas excluyen el evento', () => {
+    const a = new OrganismState('A');
+    const b = new OrganismState('B');
+    const eligible = getEligibleEvents({ self: a, other: b, relationship: null }, 0);
+    assert.ok(!eligible.includes('kiss'), 'kiss exige mutual_love');
+    assert.ok(!eligible.includes('punch'), 'punch exige conflict');
+  });
+
+  it('devuelve eventos de a dos elegibles con compañero compatible', () => {
+    const a = new OrganismState('A');
+    const b = new OrganismState('B');
+    a.setEmotion('attracted');
+    b.setEmotion('shy');
+    const eligible = getEligibleEvents({ self: a, other: b, relationship: null }, 0);
+    assert.ok(eligible.includes('hug'), 'hug: al menos uno atraído');
+    assert.ok(eligible.includes('reject'), 'reject: atraído vs tímido');
+    assert.ok(eligible.includes('approach'), 'approach: ninguno desmayado');
+    assert.ok(!eligible.includes('kiss'), 'kiss: sin mutual_love');
+  });
+
+  it('el compañero ocupado excluye los eventos de a dos', () => {
+    const a = new OrganismState('A');
+    const b = new OrganismState('B');
+    a.setEmotion('attracted');
+    b.setEmotion('attracted');
+    b.startEvent('faint', { duration: 1000 }); // b ocupado
+    const eligible = getEligibleEvents({ self: a, other: b, relationship: null }, 0);
+    assert.ok(!eligible.includes('hug'));
+    assert.ok(!eligible.includes('kiss'));
+    assert.ok(!eligible.includes('approach'));
+  });
+
+  it('excluye eventos incompatibles con el evento activo del compañero', () => {
+    const a = new OrganismState('A');
+    const b = new OrganismState('B');
+    a.setEmotion('attracted');
+    b.setEmotion('attracted');
+    a.startEvent('hug', { partnerId: 'B', duration: 1000 }); // A ocupado con hug
+    const eligible = getEligibleEvents({ self: b, other: a, relationship: 'mutual_love' }, 0);
+    assert.ok(!eligible.includes('punch'), 'punch incompatible con el hug activo de A');
+    assert.ok(!eligible.includes('kiss'), 'kiss incompatible con el hug activo de A');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B03.3 — update (finalización de eventos y effects)
+// ---------------------------------------------------------------------------
+
+describe('B03.3 — update (finalización de eventos y effects)', () => {
+  it('completa un evento cuando su duración termina', () => {
+    const system = new Reacciones();
+    const org = system.registerOrganism({ id: 'org-1' });
+    org.setEmotion('nauseous');
+    org.startEvent('faint', { duration: 1000, now: 0 });
+    system.update(500);
+    assert.equal(org.hasActiveEvent(), true, 'a los 500ms sigue activo');
+    system.update(1000);
+    assert.equal(org.hasActiveEvent(), false, 'a los 1000ms se completó');
+  });
+
+  it('aplica el efecto de emoción al finalizar (faint → fainted)', () => {
+    const system = new Reacciones();
+    const org = system.registerOrganism({ id: 'org-1' });
+    org.setEmotion('nauseous');
+    org.startEvent('faint', { duration: 1000, now: 0 });
+    system.update(1000);
+    assert.equal(org.emotion, 'fainted');
+  });
+
+  it('aplica el efecto de emoción al finalizar (shake → neutral)', () => {
+    const system = new Reacciones();
+    const org = system.registerOrganism({ id: 'org-1' });
+    org.setEmotion('fainted');
+    org.startEvent('shake', { duration: 1000, now: 0 });
+    system.update(1000);
+    assert.equal(org.emotion, 'neutral');
+  });
+
+  it('aplica el efecto de relación al finalizar (hug → mutual_love)', () => {
+    const system = new Reacciones();
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    a.startEvent('hug', { partnerId: 'B', duration: 1000, now: 0 });
+    system.update(1000);
+    assert.equal(system.getRelationship('A', 'B'), 'mutual_love');
+  });
+
+  it('aplica el efecto de relación al finalizar (punch → conflict)', () => {
+    const system = new Reacciones();
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    a.startEvent('punch', { partnerId: 'B', duration: 1000, now: 0 });
+    system.update(1000);
+    assert.equal(system.getRelationship('A', 'B'), 'conflict');
+  });
+
+  it('inicia cooldown al finalizar el evento', () => {
+    const system = new Reacciones();
+    const org = system.registerOrganism({ id: 'org-1' });
+    org.setEmotion('nauseous');
+    org.startEvent('faint', { duration: 1000, now: 0 });
+    system.update(1000); // completa + cooldown
+    assert.equal(org.canAct(1000), false, 'cooldown activo tras finalizar');
+    assert.equal(org.canAct(1000 + EVENTS.faint.cooldown), true, 'puede actuar tras expirar el cooldown');
+  });
+
+  it('no aplica efectos antes de que termine el evento', () => {
+    const system = new Reacciones();
+    const org = system.registerOrganism({ id: 'org-1' });
+    org.setEmotion('nauseous');
+    org.startEvent('faint', { duration: 1000, now: 0 });
+    system.update(500);
+    assert.equal(org.emotion, 'nauseous', 'la emoción no cambió antes de terminar');
+    assert.equal(org.hasActiveEvent(), true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B03.4 — BehaviorEngine (integración)
+// ---------------------------------------------------------------------------
+
+function createEngine(options = {}) {
+  const system = new Reacciones();
+  const engine = new BehaviorEngine(system, { random: () => 0, minGap: 0, ...options });
+  const directives = [];
+  system.events.on('directive', (d) => directives.push(d));
+  return { system, engine, directives };
+}
+
+describe('B03.4 — BehaviorEngine (integración)', () => {
+  it('un organismo neutral ocioso inicia un evento automáticamente', () => {
+    const { system, engine, directives } = createEngine();
+    const org = system.registerOrganism({ id: 'org-1' });
+    engine.update(0);
+    assert.equal(org.hasActiveEvent(), true);
+    assert.equal(org.activeEvent.eventId, 'limb_stretch');
+    assert.equal(directives.length, 1);
+    assert.equal(directives[0].phase, 'start');
+    assert.equal(directives[0].behavior, 'limb_stretch');
+    assert.equal(directives[0].organismId, 'org-1');
+  });
+
+  it('un evento de a dos vincula a ambos organismos', () => {
+    const { system, engine, directives } = createEngine({ weights: { limb_stretch: 0 } });
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    a.setEmotion('attracted');
+    b.setEmotion('shy');
+    engine.update(0);
+    assert.equal(a.activeEvent.eventId, 'approach');
+    assert.equal(b.activeEvent.eventId, 'approach');
+    assert.equal(a.partnerId, 'B');
+    assert.equal(b.partnerId, 'A');
+    assert.equal(directives.filter((d) => d.phase === 'start').length, 2);
+  });
+
+  it('las directivas tienen la estructura esperada por bodies.js', () => {
+    const { system, engine, directives } = createEngine();
+    system.registerOrganism({ id: 'org-1' });
+    engine.update(0);
+    const d = directives[0];
+    assert.equal(typeof d.organismId, 'string');
+    assert.equal(typeof d.behavior, 'string');
+    assert.equal(d.phase, 'start');
+    assert.equal(d.progress, 0);
+    assert.equal(typeof d.params, 'object');
+    assert.ok('partnerId' in d.params);
+    assert.equal(typeof d.params.duration, 'number');
+  });
+
+  it('al completarse emite end e inicia cooldown', () => {
+    const { system, engine, directives } = createEngine({ weights: { limb_stretch: 0 } });
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    a.setEmotion('attracted');
+    b.setEmotion('shy');
+    engine.update(0); // arranca approach (duración mínima 1000)
+    assert.equal(a.activeEvent.eventId, 'approach');
+    engine.update(1000); // completa approach
+    assert.equal(a.hasActiveEvent(), false);
+    assert.equal(b.hasActiveEvent(), false);
+    const ends = directives.filter((d) => d.phase === 'end');
+    assert.ok(ends.length >= 2, 'end por cada organismo');
+    assert.ok(ends.every((d) => d.behavior === 'approach'));
+    assert.equal(ends[0].phase, 'end');
+    assert.equal(ends[0].progress, 1);
+    assert.equal(typeof ends[0].organismId, 'string');
+    assert.ok('partnerId' in ends[0].params, 'end incluye partnerId');
+    assert.equal(a.canAct(1000), false, 'cooldown activo');
+  });
+
+  it('un abrazo completado establece enamoramiento mutuo', () => {
+    const { system, engine } = createEngine({
+      weights: { limb_stretch: 0, approach: 0, reject: 0 },
+    });
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    a.setEmotion('attracted');
+    b.setEmotion('shy');
+    engine.update(0);
+    assert.equal(a.activeEvent.eventId, 'hug');
+    engine.update(3000); // hug dura mínimo 3000
+    assert.equal(system.getRelationship('A', 'B'), 'mutual_love');
+  });
+
+  it('un organismo desmayado inicia shake para recuperarse', () => {
+    const { system, engine } = createEngine();
+    const org = system.registerOrganism({ id: 'org-1' });
+    org.setEmotion('fainted');
+    engine.update(0);
+    assert.equal(org.activeEvent.eventId, 'shake');
+  });
+
+  it('respeta el intervalo mínimo entre decisiones', () => {
+    const { system, engine } = createEngine({ minGap: 1000 });
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    engine.update(0); // A inicia limb_stretch; B queda ocioso
+    assert.equal(a.hasActiveEvent(), true);
+    assert.equal(b.hasActiveEvent(), false);
+    engine.update(500); // dentro del minGap: no hay nueva decisión
+    assert.equal(b.hasActiveEvent(), false);
+  });
+
+  it('no inicia un evento de a dos si el compañero está ocupado', () => {
+    const { system, engine } = createEngine({ weights: { limb_stretch: 0 } });
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    a.setEmotion('attracted');
+    b.setEmotion('shy');
+    a.startEvent('faint', { duration: 5000, now: 0 });
+    engine.update(0);
+    assert.equal(b.hasActiveEvent(), false);
+  });
+
+  it('la selección es determinista según random', () => {
+    const { system, engine } = createEngine({ random: () => 0.5 });
+    const a = system.registerOrganism({ id: 'A' });
+    const b = system.registerOrganism({ id: 'B' });
+    a.setEmotion('attracted');
+    b.setEmotion('shy');
+    engine.update(0);
+    // candidatos: limb_stretch(A), limb_stretch(B), approach, hug, reject
+    // total = 5; roll = 0.5 * 5 = 2.5 → approach
+    assert.equal(a.activeEvent.eventId, 'approach');
   });
 });
