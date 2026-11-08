@@ -8,12 +8,17 @@
 // ============================================================
 
 import { congelarProfundo } from "./families/deepFreeze.js";
-import { BLOB_TENTACULOS } from "./families/blobTentaculos.js";
-import { CADENA_LOBULOS } from "./families/cadenaLobulos.js";
-import { ESTRELLA_IRREGULAR } from "./families/estrellaIrregular.js";
-import { MASAS_ORGANICAS } from "./families/masasOrganicas.js";
+import { ESFERAS_ENCADENADAS } from "./families/esferasEncadenadas.js";
+import { ABANICO_EXTREMIDADES } from "./families/abanicoExtremidades.js";
+import { SERPIENTE_ALTERNADA } from "./families/serpienteAlternada.js";
+import { RACIMO_LATERAL } from "./families/racimoLateral.js";
 
-const FAMILIAS = [BLOB_TENTACULOS, CADENA_LOBULOS, ESTRELLA_IRREGULAR, MASAS_ORGANICAS];
+const FAMILIAS = [
+  ESFERAS_ENCADENADAS,
+  ABANICO_EXTREMIDADES,
+  SERPIENTE_ALTERNADA,
+  RACIMO_LATERAL,
+];
 
 export const FamilyRegistry = congelarProfundo({
   /** Todas las familias registradas, en orden. */

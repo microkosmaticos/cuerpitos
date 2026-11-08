@@ -1,46 +1,42 @@
 // ============================================================
 // canonical.js
 //
-// Convierte la canónica de una familia (números fijos) en puntos
-// listos para dibujar. Es el puente entre "el plano" y "la muestra".
+// Convierte una lista de partes (los números fijos de una canónica
+// o los valores al azar de un genoma) en puntos listos para dibujar.
 //
-// Acá SÍ hay geometría (rotar, mover al borde), pero sigue siendo
-// modelo: no se dibuja nada, ni se usa p5, ni hay aleatoriedad.
+// Acá SÍ hay geometría (rotar, mover al borde, hundir la base), pero
+// sigue siendo modelo: no se dibuja nada, ni se usa p5, ni hay
+// aleatoriedad.
+//
+// Tipos de forma base:
+//   - "esfera"  → usa radius (RADIO, no diámetro)
+//   - "silueta" → usa width y height (ancho y alto máximos)
 // ============================================================
 
-import { crearApendice, crearBlob, crearLobulo, crearMasa, crearPunta } from "./baseShapes.js";
+import { crearEsfera, crearSilueta } from "./baseShapes.js";
+import { getSilueta } from "./silhouettes.js";
 
 // Qué generador usar según la "forma base" que declara el slot.
-// Las familias que vengan después solo tienen que usar estos nombres.
-//
-// MEDIDAS que llegan desde la canónica:
-//   - parte.size      → RADIO de la masa (no el diámetro)
-//   - parte.length    → distancia de la base a la punta
-//   - parte.thickness → ancho en la base
 const GENERADORES = {
-  blob: (parte) => crearBlob({ radio: parte.size }),
-  apendice: (parte) =>
-    crearApendice({ largo: parte.length, grosor: parte.thickness, curva: parte.curva }),
-  lobulo: (parte) => crearLobulo({ radio: parte.size }),
-  punta: (parte) => crearPunta({ largo: parte.length, base: parte.thickness, curva: parte.curva }),
-  masa: (parte) => crearMasa({ radio: parte.size }),
+  esfera: (parte) => crearEsfera({ radio: parte.radius }),
+  silueta: (parte, slot) => crearSilueta(getSilueta(slot.silhouette), parte.width, parte.height),
 };
 
 /**
- * Construye los puntos de la forma canónica de una familia.
- * Devuelve { familyId, name, description, parts, bounds }.
+ * Construye la forma completa de una familia a partir de una lista
+ * de partes con los valores ya decididos.
  *
- * Cada parte conserva id, rol y ancla, para que después el tracking
- * pueda mover una parte suelta sin tocar las demás.
+ * @param {object} familia familia anatómica
+ * @param {object[]} partes lista con slotId y los valores de cada parte
  */
-export function construirCanonica(familia) {
+export function construirForma(familia, partes) {
   const slotsPorId = new Map(familia.slots.map((slot) => [slot.id, slot]));
   const conexionPorHijo = new Map(familia.connections.map((conexion) => [conexion.child, conexion]));
 
   const construidas = new Map();
-  const partes = [];
+  const resultado = [];
 
-  for (const parte of familia.canonical.parts) {
+  for (const parte of partes) {
     const slot = slotsPorId.get(parte.slotId);
     if (!slot) {
       throw new Error(`La familia "${familia.id}" no tiene un slot llamado "${parte.slotId}".`);
@@ -51,59 +47,87 @@ export function construirCanonica(familia) {
       throw new Error(`Forma base desconocida: "${slot.baseShape}".`);
     }
 
-    let puntos = generador(parte);
+    const construido = generador(parte, slot);
+    let points = construido.points;
+    let extras = construido.extras;
 
     // Si esta parte se conecta a otra, la movemos al borde de su padre
     // y la rotamos para que salga en la dirección indicada.
     const conexion = conexionPorHijo.get(slot.id);
+
     if (conexion) {
       const padre = construidas.get(conexion.parent);
       if (!padre) {
         throw new Error(
-          `La parte "${slot.id}" necesita que "${conexion.parent}" esté antes en la canónica.`
+          `La parte "${slot.id}" necesita que "${conexion.parent}" esté antes en la lista.`
         );
       }
 
       const angulo = parte.angle ?? 0;
       const radianes = gradosARadianes(angulo);
       const puntoUnion = puntoDeBorde(padre.points, angulo);
+      const hundido = calcularHundido(parte);
 
-      // Hundimos la base un poco dentro del padre: así la unión
-      // no queda con una costura visible. Si la parte tiene grosor,
-      // entra medio grosor; si es una masa, entra un quinto de su tamaño.
-      const hundido = parte.thickness ? parte.thickness / 2 : (parte.size ?? 0) * 0.2;
+      // La parte original apuntaba a "direccion"; la giramos para que
+      // apunte al ángulo pedido.
+      const giro = radianes - construido.direccion;
 
-      puntos = rotarYTrasladar(
-        puntos,
-        radianes,
-        puntoUnion.x - Math.cos(radianes) * hundido,
-        puntoUnion.y - Math.sin(radianes) * hundido
-      );
+      const trasladoX = puntoUnion.x - Math.cos(radianes) * hundido;
+      const trasladoY = puntoUnion.y - Math.sin(radianes) * hundido;
+
+      points = rotarYTrasladar(points, giro, trasladoX, trasladoY);
+      // Los ojos y cualquier decoración giran y se mueven igual que su parte.
+      extras = extras.map((extra) => rotarYTrasladar(extra, giro, trasladoX, trasladoY));
+    } else {
+      // El núcleo no cuelga de nadie: se centra en el origen.
+      // (Una esfera viene "colgada" desde su borde, así que acá se corrige.)
+      const centro = centroideDe(points);
+      points = trasladar(points, -centro.x, -centro.y);
+      extras = extras.map((extra) => trasladar(extra, -centro.x, -centro.y));
     }
 
     const construida = {
       id: slot.id,
       role: slot.role,
       anchor: slot.anchor,
-      points: puntos,
+      points,
+      extras,
     };
 
     construidas.set(slot.id, construida);
-    partes.push(construida);
+    resultado.push(construida);
   }
 
   return {
     familyId: familia.id,
     name: familia.name,
     description: familia.description,
-    parts: partes,
-    bounds: calcularBounds(partes),
+    parts: resultado,
+    bounds: calcularBounds(resultado),
   };
+}
+
+/**
+ * La forma canónica de una familia: la muestra fija que usa la galería.
+ * Es solo un caso particular de construirForma().
+ */
+export function construirCanonica(familia) {
+  return construirForma(familia, familia.canonical.parts);
 }
 
 // ------------------------------------------------------------
 // Ayudas de geometría
 // ------------------------------------------------------------
+
+/**
+ * Cuánto se hunde la parte dentro de su padre para que la unión
+ * no se vea como una costura.
+ */
+function calcularHundido(parte) {
+  if (typeof parte.radius === "number") return parte.radius * 0.2;
+  if (typeof parte.width === "number") return parte.width * 0.1;
+  return 0;
+}
 
 /**
  * Busca, entre los puntos de una silueta, el que está más lejos
@@ -142,6 +166,20 @@ function rotarYTrasladar(puntos, radianes, trasladoX, trasladoY) {
 
 function gradosARadianes(grados) {
   return (grados * Math.PI) / 180;
+}
+
+function centroideDe(puntos) {
+  let sumaX = 0;
+  let sumaY = 0;
+  for (const punto of puntos) {
+    sumaX += punto.x;
+    sumaY += punto.y;
+  }
+  return { x: sumaX / puntos.length, y: sumaY / puntos.length };
+}
+
+function trasladar(puntos, dx, dy) {
+  return puntos.map((punto) => ({ x: punto.x + dx, y: punto.y + dy }));
 }
 
 /** Caja que ocupa la forma completa. */

@@ -18,7 +18,6 @@ export class FamilyGalleryView {
   constructor(p) {
     this.p = p;
   }
-
   /**
    * @param {object} forma resultado de construirCanonica()
    */
@@ -38,15 +37,14 @@ export class FamilyGalleryView {
     p.fill(226, 226, 238);
     p.noStroke();
 
-    // El núcleo se dibuja ÚLTIMO: así tapa la base de los apéndices
-    // y la unión se ve orgánica, sin costuras.
-    const ordenadas = [...forma.parts].sort(
-      (a, b) => (a.role === "nucleo" ? 1 : 0) - (b.role === "nucleo" ? 1 : 0)
-    );
+    // Orden de dibujo: primero las extremidades, después la cabeza
+    // y al final el núcleo. Así el núcleo tapa las uniones y la cabeza
+    // queda por encima de las piezas que la rodean.
+    const ordenadas = [...forma.parts].sort((a, b) => pesoDeDibujo(a) - pesoDeDibujo(b));
 
     for (const parte of ordenadas) {
       // Dos tonos neutros por ahora: las paletas son otra tarea.
-      // El tono más claro es el núcleo y el más oscuro los apéndices.
+      // El tono más claro es el núcleo y el más oscuro el resto.
       if (parte.role === "nucleo") p.fill(232, 232, 242);
       else p.fill(196, 196, 214);
 
@@ -55,6 +53,17 @@ export class FamilyGalleryView {
         p.vertex(punto.x, punto.y);
       }
       p.endShape(p.CLOSE);
+
+      // Decoraciones que viajan pegadas a la parte (por ejemplo, los ojos
+      // de la cabeza). Van más oscuras para que se distingan.
+      for (const extra of parte.extras ?? []) {
+        p.fill(26, 26, 34);
+        p.beginShape();
+        for (const punto of extra) {
+          p.vertex(punto.x, punto.y);
+        }
+        p.endShape(p.CLOSE);
+      }
     }
 
     p.pop();
@@ -82,4 +91,14 @@ export class FamilyGalleryView {
     );
     p.text("← / A  anterior      → / D  siguiente", 24, 88);
   }
+}
+
+/**
+ * Qué tan arriba se dibuja cada parte.
+ * 0 = extremidades, 1 = cabeza, 2 = núcleo (el último tapa las uniones).
+ */
+function pesoDeDibujo(parte) {
+  if (parte.role === "nucleo") return 2;
+  if (parte.role === "cabeza") return 1;
+  return 0;
 }
