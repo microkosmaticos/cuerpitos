@@ -10,10 +10,15 @@
 //   - la señal (1 = tracking pleno, 0 = sin datos)
 //
 // Cómo se mueve:
-//   - objetivo = diferencia entre el ancla y el reposo de la parte,
-//     multiplicada por la ganancia y por la energía
-//   - el objetivo pasa por un filtro exponencial (retraso)
-//   - después por un resorte amortiguado (rigidez/amortiguación)
+//   - cada parte guarda una MEDIA LENTA de la posición de su ancla
+//     (MEMORIA_DE_ANCLA). El estímulo es el DESVÍO actual contra esa
+//     media: si el ancla se queda quieta, el desvío es 0 y la parte
+//     vuelve a su reposo, sin importar dónde esté parada la persona.
+//   - ese desvío se proyecta perpendicular a la dirección de reposo
+//     de la parte: un desplazamiento lateral la hace girar, uno
+//     radial no.
+//   - el objetivo pasa por un filtro exponencial (retraso) y después
+//     por un resorte amortiguado (rigidez/amortiguación).
 //
 // DELTA TIME: la física avanza en PASOS FIJOS de 1/120 s con un
 // acumulador. Por eso 30 y 60 fps dan el mismo resultado: no importa
@@ -41,6 +46,18 @@ const DECAIMIENTO_DE_SENAL = 0.8;
 const RECUPERACION_DE_SENAL = 0.2;
 const SUAVIZADO_DE_POSICION = 0.25;
 const CONFIANZA_MINIMA = 0.3;
+
+/**
+ * Memoria lenta de la posición de cada ancla, en segundos.
+ * Borra el vaivén lento (caminar) y deja los gestos.
+ */
+export const MEMORIA_DE_ANCLA = 1.2;
+
+/**
+ * Desplazamiento que equivale a la deformación máxima.
+ * Un gesto de 8 % de la pantalla pide el 100 % del recorrido.
+ */
+export const ESCALA_DE_DESVIO = 0.08;
 
 /** Debajo de esto se considera quieto y se congela en reposo. */
 const QUIETO = 1e-3;
@@ -70,6 +87,8 @@ export class OrganismPose {
         objetivo: 0,
         velocidad: 0,
         reposo: anguloDeReposo(parte),
+        // Media lenta de la posición de su ancla (se inicializa al primer dato).
+        media: null,
       });
     }
 
@@ -129,9 +148,36 @@ export class OrganismPose {
       const vinculo = this.vinculos.get(partId);
       const ancla = persona?.anchors?.[vinculo.ancla] ?? null;
 
-      const deseo = ancla
-        ? objetivoDeAngulo(ancla, persona.center, estadoParte.reposo, vinculo, intensidad)
-        : 0;
+      let deseo = 0;
+
+      if (ancla && haySenal) {
+        // La primera vez, la media arranca en la posición actual:
+        // así no hay un tirón inicial.
+        if (!estadoParte.media) {
+          estadoParte.media = { x: ancla.x, y: ancla.y };
+        }
+
+        // Desvío contra la media lenta: quieto = 0, movimiento = > 0.
+        const desvioX = ancla.x - estadoParte.media.x;
+        const desvioY = ancla.y - estadoParte.media.y;
+
+        // Proyección perpendicular a la dirección de reposo de la parte.
+        const normalX = -Math.sin(estadoParte.reposo);
+        const normalY = Math.cos(estadoParte.reposo);
+        const proyeccion = desvioX * normalX + desvioY * normalY;
+
+        const maximo = gradosARadianes(LIMITES.angulo);
+        deseo = acotar(
+          vinculo.ganancia * (proyeccion / ESCALA_DE_DESVIO) * intensidad,
+          -maximo,
+          maximo
+        );
+
+        // La media se actualiza después de medir el desvío.
+        const alfaMedia = 1 - Math.exp(-paso / MEMORIA_DE_ANCLA);
+        estadoParte.media.x += desvioX * alfaMedia;
+        estadoParte.media.y += desvioY * alfaMedia;
+      }
 
       // 1. Retraso: filtro exponencial del objetivo.
       const retrasoEfectivo = vinculo.retraso * (1 + 0.5 * vinculo.fase);
@@ -229,22 +275,6 @@ export class OrganismPose {
 function intensidadDeEnergia(energy) {
   if (!(energy > ZONA_MUERTA)) return 0;
   return Math.min(1, (energy - ZONA_MUERTA) / (1 - ZONA_MUERTA));
-}
-
-/** Diferencia entre el ángulo del ancla y el reposo de la parte. */
-function objetivoDeAngulo(ancla, centro, reposo, vinculo, intensidad) {
-  const anguloAncla = Math.atan2(ancla.y - centro.y, ancla.x - centro.x);
-  const diferencia = normalizarAngulo(anguloAncla - reposo);
-  const maximo = gradosARadianes(LIMITES.angulo);
-
-  return acotar(diferencia * vinculo.ganancia * intensidad, -maximo, maximo);
-}
-
-function normalizarAngulo(angulo) {
-  let valor = angulo;
-  while (valor > Math.PI) valor -= Math.PI * 2;
-  while (valor < -Math.PI) valor += Math.PI * 2;
-  return valor;
 }
 
 function acotar(valor, minimo, maximo) {

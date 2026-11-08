@@ -508,6 +508,73 @@ function crearPose(semilla) {
 }
 
 // ------------------------------------------------------------
+// 4b. Objetivo por movimiento (no por posición)
+// ------------------------------------------------------------
+
+{
+  const reporte = crearReporte("Pose: anclas quietas no deforman");
+  const comprobar = comprobarEn(reporte);
+
+  // Ancla quieta en una esquina, energía alta, diez segundos.
+  const quieta = personaConAnclas(0.9, 0.2, 1);
+  const { pose } = crearPose(17);
+
+  for (let i = 0; i < 600; i++) pose.update(1 / 60, quieta);
+
+  let maximo = 0;
+  for (const estado of pose.estado.partes.values()) {
+    maximo = Math.max(maximo, Math.abs(estado.angulo));
+  }
+
+  const medioGrado = (0.5 * Math.PI) / 180;
+  comprobar(
+    maximo < medioGrado,
+    `quieta y con energía alta, el ángulo debería quedar cerca de 0 y quedó ${((maximo * 180) / Math.PI).toFixed(2)}°`
+  );
+}
+
+{
+  const reporte = crearReporte("Pose: las anclas que oscilan mueven");
+  const comprobar = comprobarEn(reporte);
+
+  // La oscilación es vertical porque los brazos apuntan en horizontal:
+  // así la proyección perpendicular es máxima.
+  const oscilante = (t, amplitud) =>
+    personaConAnclas(0.5, 0.5 + amplitud * Math.sin(2 * Math.PI * 0.6 * t), 0.9);
+
+  const correr = (amplitud) => {
+    const { pose } = crearPose(19);
+    let maximo = 0;
+    for (let i = 0; i < 600; i++) {
+      const t = i / 60;
+      pose.update(1 / 60, oscilante(t, amplitud));
+      for (const estado of pose.estado.partes.values()) {
+        maximo = Math.max(maximo, Math.abs(estado.angulo));
+      }
+    }
+    return maximo;
+  };
+
+  const chico = correr(0.025);
+  const grande = correr(0.05);
+
+  const unGrado = Math.PI / 180;
+  const veintidosGrados = (22.5 * Math.PI) / 180;
+
+  comprobar(grande > unGrado, `la oscilación debería mover y movió ${((grande * 180) / Math.PI).toFixed(2)}°`);
+  comprobar(
+    grande < veintidosGrados,
+    `la oscilación no debería pegarse al límite y llegó a ${((grande * 180) / Math.PI).toFixed(1)}°`
+  );
+
+  const proporcion = grande / chico;
+  comprobar(
+    proporcion > 1.4 && proporcion < 2.6,
+    `al duplicar la amplitud la respuesta creció ${proporcion.toFixed(2)} veces`
+  );
+}
+
+// ------------------------------------------------------------
 // 5. Jerarquía: el hijo sigue al padre
 // ------------------------------------------------------------
 
