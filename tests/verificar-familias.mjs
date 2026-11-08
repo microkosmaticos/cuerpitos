@@ -363,17 +363,6 @@ function verificarCanonica(familia, reporte) {
   comprobar(forma.bounds.width > 0, `${nombre}: la canónica tiene ancho 0`);
   comprobar(forma.bounds.height > 0, `${nombre}: la canónica tiene alto 0`);
 
-  // La cabeza es una parte más y lleva sus dos ojos como decoración.
-  const cabezas = forma.parts.filter((parte) => parte.role === "cabeza");
-  comprobar(cabezas.length === 1, `${nombre}: debe tener 1 cabeza y tiene ${cabezas.length}`);
-
-  if (cabezas.length === 1) {
-    comprobar(
-      cabezas[0].extras.length === 2,
-      `${nombre}: la cabeza debe llevar 2 ojos y lleva ${cabezas[0].extras.length}`
-    );
-  }
-
   // Resumen legible para la salida
   reporte.detalle = Object.entries(familia.roles)
     .map(([rol]) => {

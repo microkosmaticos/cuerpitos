@@ -4,9 +4,14 @@
 // Convierte una lista de partes (los números fijos de una canónica
 // o los valores al azar de un genoma) en puntos listos para dibujar.
 //
-// Acá SÍ hay geometría (rotar, mover al borde, hundir la base), pero
-// sigue siendo modelo: no se dibuja nada, ni se usa p5, ni hay
-// aleatoriedad.
+// Dos formas de colocar una parte:
+//
+//   1. COMPOSICIÓN ORIGINAL: si la parte es "de origen" y cuelga del
+//      núcleo, se coloca donde estaba en el dibujo (su "home"),
+//      escalado junto con el torso. Así el organismo se ve como el SVG.
+//
+//   2. CADENA: si cuelga de otra parte (un antebrazo de un brazo),
+//      sale de la PUNTA del padre y continúa su dirección.
 //
 // Tipos de forma base:
 //   - "esfera"  → usa radius (RADIO, no diámetro)
@@ -16,7 +21,6 @@
 import { crearEsfera, crearSilueta } from "./baseShapes.js";
 import { getSilueta } from "./silhouettes.js";
 
-// Qué generador usar según la "forma base" que declara el slot.
 const GENERADORES = {
   esfera: (parte) => crearEsfera({ radio: parte.radius }),
   silueta: (parte, slot) => crearSilueta(getSilueta(slot.silhouette), parte.width, parte.height),
@@ -25,13 +29,10 @@ const GENERADORES = {
 /**
  * Construye la forma completa de una familia a partir de una lista
  * de partes con los valores ya decididos.
- *
- * @param {object} familia familia anatómica
- * @param {object[]} partes lista con slotId y los valores de cada parte
  */
 export function construirForma(familia, partes) {
   const slotsPorId = new Map(familia.slots.map((slot) => [slot.id, slot]));
-  const conexionPorHijo = new Map(familia.connections.map((conexion) => [conexion.child, conexion]));
+  const conexionPorHijo = new Map(familia.connections.map((c) => [c.child, c]));
 
   const construidas = new Map();
   const resultado = [];
@@ -50,10 +51,10 @@ export function construirForma(familia, partes) {
     const construido = generador(parte, slot);
     let points = construido.points;
     let extras = construido.extras;
+    let origen = { x: 0, y: 0 };
 
-    // Si esta parte se conecta a otra, la movemos al borde de su padre
-    // y la rotamos para que salga en la dirección indicada.
     const conexion = conexionPorHijo.get(slot.id);
+    const siluetaHija = slot.silhouette ? getSilueta(slot.silhouette) : null;
 
     if (conexion) {
       const padre = construidas.get(conexion.parent);
@@ -65,22 +66,36 @@ export function construirForma(familia, partes) {
 
       const angulo = parte.angle ?? 0;
       const radianes = gradosARadianes(angulo);
-      const puntoUnion = puntoDeBorde(padre.points, angulo);
-      const hundido = calcularHundido(parte);
-
-      // La parte original apuntaba a "direccion"; la giramos para que
-      // apunte al ángulo pedido.
       const giro = radianes - construido.direccion;
 
-      const trasladoX = puntoUnion.x - Math.cos(radianes) * hundido;
-      const trasladoY = puntoUnion.y - Math.sin(radianes) * hundido;
+      const slotPadre = slotsPorId.get(conexion.parent);
+      const siluetaPadre = slotPadre?.silhouette ? getSilueta(slotPadre.silhouette) : null;
 
-      points = rotarYTrasladar(points, giro, trasladoX, trasladoY);
-      // Los ojos y cualquier decoración giran y se mueven igual que su parte.
-      extras = extras.map((extra) => rotarYTrasladar(extra, giro, trasladoX, trasladoY));
+      if (slotPadre?.role === "nucleo" && siluetaHija && slot.origen) {
+        // Composición original: el punto de unión escalado con el torso.
+        const cajaPadre = calcularBounds([padre.points]);
+        const escalaX = cajaPadre.width / siluetaPadre.tamano.width;
+        const escalaY = cajaPadre.height / siluetaPadre.tamano.height;
+
+        origen = {
+          x: siluetaHija.home.x * escalaX,
+          y: siluetaHija.home.y * escalaY,
+        };
+      } else {
+        // Cadena: sale de la punta del padre.
+        const punta = puntoDeBorde(padre.points, angulo);
+        const hundido = calcularHundido(parte);
+
+        origen = {
+          x: punta.x - Math.cos(radianes) * hundido,
+          y: punta.y - Math.sin(radianes) * hundido,
+        };
+      }
+
+      points = rotarYTrasladar(points, giro, origen.x, origen.y);
+      extras = extras.map((extra) => rotarYTrasladar(extra, giro, origen.x, origen.y));
     } else {
       // El núcleo no cuelga de nadie: se centra en el origen.
-      // (Una esfera viene "colgada" desde su borde, así que acá se corrige.)
       const centro = centroideDe(points);
       points = trasladar(points, -centro.x, -centro.y);
       extras = extras.map((extra) => trasladar(extra, -centro.x, -centro.y));
@@ -90,6 +105,7 @@ export function construirForma(familia, partes) {
       id: slot.id,
       role: slot.role,
       anchor: slot.anchor,
+      origen,
       points,
       extras,
     };
@@ -103,14 +119,11 @@ export function construirForma(familia, partes) {
     name: familia.name,
     description: familia.description,
     parts: resultado,
-    bounds: calcularBounds(resultado),
+    bounds: calcularBounds(resultado.map((parte) => parte.points)),
   };
 }
 
-/**
- * La forma canónica de una familia: la muestra fija que usa la galería.
- * Es solo un caso particular de construirForma().
- */
+/** La forma canónica de una familia: la muestra fija que usa la galería. */
 export function construirCanonica(familia) {
   return construirForma(familia, familia.canonical.parts);
 }
@@ -119,10 +132,7 @@ export function construirCanonica(familia) {
 // Ayudas de geometría
 // ------------------------------------------------------------
 
-/**
- * Cuánto se hunde la parte dentro de su padre para que la unión
- * no se vea como una costura.
- */
+/** Cuánto se hunde la parte dentro de su padre para tapar la costura. */
 function calcularHundido(parte) {
   if (typeof parte.radius === "number") return parte.radius * 0.2;
   if (typeof parte.width === "number") return parte.width * 0.1;
@@ -130,30 +140,41 @@ function calcularHundido(parte) {
 }
 
 /**
- * Busca, entre los puntos de una silueta, el que está más lejos
- * en la dirección del ángulo. Ese es el punto del borde donde
- * se conecta la parte hija.
+ * Punto del borde en una dirección.
+ * Si el borde es recto, devuelve el MEDIO del borde (promedia los
+ * puntos que empatan en la proyección máxima), no una esquina.
  */
 function puntoDeBorde(puntos, anguloGrados) {
   const radianes = gradosARadianes(anguloGrados);
   const dx = Math.cos(radianes);
   const dy = Math.sin(radianes);
 
-  let mejor = puntos[0];
-  let mejorProyeccion = -Infinity;
+  let maximo = -Infinity;
+  let minimo = Infinity;
 
   for (const punto of puntos) {
     const proyeccion = punto.x * dx + punto.y * dy;
-    if (proyeccion > mejorProyeccion) {
-      mejorProyeccion = proyeccion;
-      mejor = punto;
+    if (proyeccion > maximo) maximo = proyeccion;
+    if (proyeccion < minimo) minimo = proyeccion;
+  }
+
+  const tolerancia = Math.max(0.001, (maximo - minimo) * 0.005);
+
+  let sumaX = 0;
+  let sumaY = 0;
+  let cantidad = 0;
+
+  for (const punto of puntos) {
+    if (punto.x * dx + punto.y * dy >= maximo - tolerancia) {
+      sumaX += punto.x;
+      sumaY += punto.y;
+      cantidad++;
     }
   }
 
-  return mejor;
+  return { x: sumaX / cantidad, y: sumaY / cantidad };
 }
 
-/** Rota los puntos alrededor del origen y después los traslada. */
 function rotarYTrasladar(puntos, radianes, trasladoX, trasladoY) {
   const cos = Math.cos(radianes);
   const sin = Math.sin(radianes);
@@ -182,15 +203,15 @@ function trasladar(puntos, dx, dy) {
   return puntos.map((punto) => ({ x: punto.x + dx, y: punto.y + dy }));
 }
 
-/** Caja que ocupa la forma completa. */
-function calcularBounds(partes) {
+/** Caja que ocupa una lista de puntos. */
+function calcularBounds(listasDePuntos) {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
 
-  for (const parte of partes) {
-    for (const punto of parte.points) {
+  for (const puntos of listasDePuntos) {
+    for (const punto of puntos) {
       if (punto.x < minX) minX = punto.x;
       if (punto.y < minY) minY = punto.y;
       if (punto.x > maxX) maxX = punto.x;

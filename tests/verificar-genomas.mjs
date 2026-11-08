@@ -22,7 +22,7 @@
 // ============================================================
 
 import { FamilyRegistry } from "../src/model/FamilyRegistry.js";
-import { createGenome, SEPARACION_MINIMA } from "../src/model/genome/createGenome.js";
+import { createGenome, SEPARACION_GARANTIZADA } from "../src/model/genome/createGenome.js";
 import { bornOrganism } from "../src/model/genome/bornOrganism.js";
 import { construirCanonica } from "../src/model/families/canonical.js";
 
@@ -133,25 +133,14 @@ function problemasDelGenoma(familia, genome) {
   for (const [padre, hermanos] of hermanosPorPadre) {
     if (hermanos.length < 2) continue;
 
-    // Qué separación es razonable: 20° o lo que permita el rango disponible.
-    let minimoRango = Infinity;
-    let maximoRango = -Infinity;
-    for (const hermano of hermanos) {
-      const rango = conexionPorHijo.get(hermano.slotId).angleRange;
-      minimoRango = Math.min(minimoRango, rango.min);
-      maximoRango = Math.max(maximoRango, rango.max);
-    }
-    const amplitud = Math.min(360, maximoRango - minimoRango);
-    const esperada = Math.min(SEPARACION_MINIMA, amplitud / hermanos.length);
-
     for (let i = 0; i < hermanos.length; i++) {
       for (let j = i + 1; j < hermanos.length; j++) {
         const diferencia = Math.abs(hermanos[i].angle - hermanos[j].angle) % 360;
         const distancia = Math.min(diferencia, 360 - diferencia);
 
-        if (distancia < esperada - 2) {
+        if (distancia < SEPARACION_GARANTIZADA - 0.5) {
           problemas.push(
-            `${padre}: ${hermanos[i].slotId} y ${hermanos[j].slotId} a ${distancia.toFixed(1)}° (se esperaba ≥ ${esperada.toFixed(1)}°)`
+            `${padre}: ${hermanos[i].slotId} y ${hermanos[j].slotId} a ${distancia.toFixed(1)}° (mínimo ${SEPARACION_GARANTIZADA}°)`
           );
         }
       }

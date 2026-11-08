@@ -3,16 +3,19 @@
 //
 // Biblioteca de SILUETAS sacadas de los SVG de archivossvg/.
 // Es el vocabulario de formas de las familias: torso, cabeza,
-// brazo y antebrazo de cada dibujo. NO se usan la cabeza ni los
-// ojos para generar caras nuevas: son solo las formas del dibujo.
+// brazos y antebrazos de cada dibujo.
 //
 // Cada silueta se guarda NORMALIZADA:
 //   - su punto de unión queda en (0, 0),
 //   - "direccion" dice hacia dónde apuntaba la parte en el dibujo,
-//     así después se la puede rotar a cualquier ángulo.
+//   - "home" dice DÓNDE estaba ese punto de unión respecto del centro
+//     del torso. Es lo que permite reconstruir la composición original:
+//     brazos y antebrazos vuelven al lugar donde los dibujaste.
+//   - "tamano" es la caja original, para escalar el "home" junto con
+//     el torso.
 //
-// Para el torso el origen es su centro (es el núcleo, no se cuelga
-// de nada) y para la cabeza el origen es su punto más bajo.
+// Se guardan los DOS lados (izquierdo y derecho) porque el dibujo los
+// tiene a ambos lados del cuerpo.
 //
 // Las siluetas están congeladas: nadie las modifica en tiempo real.
 // ============================================================
@@ -41,6 +44,22 @@ function centroide(puntos) {
   return { x: sumaX / puntos.length, y: sumaY / puntos.length };
 }
 
+function caja(puntos) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const punto of puntos) {
+    if (punto.x < minX) minX = punto.x;
+    if (punto.y < minY) minY = punto.y;
+    if (punto.x > maxX) maxX = punto.x;
+    if (punto.y > maxY) maxY = punto.y;
+  }
+
+  return { width: maxX - minX, height: maxY - minY };
+}
+
 function puntoMasCercano(puntos, referencia) {
   let mejor = puntos[0];
   let mejorDistancia = Infinity;
@@ -60,8 +79,8 @@ function puntoMasCercano(puntos, referencia) {
 
 /**
  * Normaliza una parte que cuelga de otra:
- * el punto más cercano a la referencia pasa a (0, 0) y se guarda
- * la dirección en la que la parte se aleja del cuerpo.
+ * el punto más cercano a la referencia pasa a (0, 0), se guarda la
+ * dirección en la que se aleja y el lugar donde estaba en el dibujo.
  */
 function normalizar(puntos, ojos, referencia) {
   const anclaje = puntoMasCercano(puntos, referencia);
@@ -72,6 +91,8 @@ function normalizar(puntos, ojos, referencia) {
     // Los ojos viajan en el mismo sistema de coordenadas que su cabeza.
     ojos: ojos.map((ojo) => trasladar(ojo, -anclaje.x, -anclaje.y)),
     direccion: Math.atan2(centro.y - anclaje.y, centro.x - anclaje.x),
+    home: { x: anclaje.x - referencia.x, y: anclaje.y - referencia.y },
+    tamano: caja(puntos),
   });
 }
 
@@ -83,6 +104,8 @@ function centrar(puntos) {
     puntos: trasladar(puntos, -centro.x, -centro.y),
     ojos: [],
     direccion: 0,
+    home: { x: 0, y: 0 },
+    tamano: caja(puntos),
   });
 }
 
@@ -101,14 +124,23 @@ for (const forma of loadShapes(SHAPES)) {
   const ojos = forma.getPart("ojos").sides.map((lado) => lado.points);
   SILUETAS[`${forma.id}/cabeza`] = normalizar(cabeza, ojos, referencia);
 
-  // Se toma un solo brazo y un solo antebrazo: el derecho es el espejo.
-  SILUETAS[`${forma.id}/brazo`] = normalizar(
-    forma.getPart("brazo").sides[0].points,
+  const brazos = forma.getPart("brazo").sides;
+  const antebrazos = forma.getPart("antebrazo").sides;
+
+  SILUETAS[`${forma.id}/brazo-izquierda`] = normalizar(brazos[0].points, [], referencia);
+  SILUETAS[`${forma.id}/brazo-derecha`] = normalizar(
+    brazos[brazos.length - 1].points,
     [],
     referencia
   );
-  SILUETAS[`${forma.id}/antebrazo`] = normalizar(
-    forma.getPart("antebrazo").sides[0].points,
+
+  SILUETAS[`${forma.id}/antebrazo-izquierda`] = normalizar(
+    antebrazos[0].points,
+    [],
+    referencia
+  );
+  SILUETAS[`${forma.id}/antebrazo-derecha`] = normalizar(
+    antebrazos[antebrazos.length - 1].points,
     [],
     referencia
   );
