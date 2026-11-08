@@ -1,12 +1,14 @@
 // ============================================================
 // EscenarioView.js
 //
-// La VISTA del escenario: dibuja el organismo con su paleta y la
-// pose viva. No calcula nada de movimiento: recibe la pose ya hecha.
+// La VISTA del escenario. Dibuja los organismos con su paleta, su
+// pose viva y su PRESENCIA (nacimiento y desaparición).
 //
-// El modo depuración muestra los anchors del tracking, una línea
-// desde cada parte hasta su ancla y los valores de energía y
-// confianza. Vive en TrackingDebugView.js.
+// La vista no decide estados ni tiempos: recibe la presencia ya
+// calculada y solo la convierte en escala, opacidad y halo.
+//
+// La escala por presencia es UNIFORME para todo el organismo, así
+// las proporciones nunca cambian.
 // ============================================================
 
 import { calcularAjuste } from "./canvasFit.js";
@@ -22,6 +24,7 @@ export class EscenarioView {
     this.p = p;
     this.fondo = "oscuro";
     this.mostrarDepuracion = true;
+    this.mostrarEventos = false;
     this.transformacion = null;
   }
 
@@ -34,59 +37,84 @@ export class EscenarioView {
     this.mostrarDepuracion = !this.mostrarDepuracion;
   }
 
+  alternarEventos() {
+    this.mostrarEventos = !this.mostrarEventos;
+  }
+
   /**
-   * @param {object} datos { organismo, pose, frame, vinculos, modo }
+   * @param {object} datos { items, frame, modo, pendientes, eventos }
    */
-  draw({ organismo, pose, frame, vinculos, modo }) {
+  draw({ items, frame, modo, pendientes, eventos }) {
     const p = this.p;
 
     this.dibujarFondo();
 
-    const forma = organismo.shape;
-    const ajuste = calcularAjuste(forma.bounds, p.width, p.height, 110);
+    const columnas = Math.max(1, items.length);
+    const ancho = p.width / columnas;
 
-    const centroX = p.width / 2 + pose.posicion.x * p.width;
-    const centroY = p.height / 2 + pose.posicion.y * p.height;
+    items.forEach((item, indice) => {
+      this.dibujarOrganismo(item, indice * ancho, 0, ancho, p.height);
+    });
 
-    this.transformacion = {
-      centroX,
-      centroY,
-      escala: ajuste.escala,
-      formaCentroX: ajuste.centroX,
-      formaCentroY: ajuste.centroY,
-    };
+    const persona = frame?.persons[0] ?? null;
 
-    const partes = aplicarPose(forma, pose);
-
-    p.push();
-    p.translate(centroX, centroY);
-    p.scale(ajuste.escala);
-    p.translate(-ajuste.centroX, -ajuste.centroY);
-
-    const ordenadas = [...partes].sort((a, b) => pesoDeDibujo(a) - pesoDeDibujo(b));
-
-    this.dibujarHalo(forma, organismo.palette);
-    this.dibujarPartes(ordenadas, organismo.palette);
-
-    p.pop();
-
-    const persona = frame.persons[0] ?? null;
-
-    if (this.mostrarDepuracion) {
-      dibujarDepuracion(this.p, {
+    if (this.mostrarDepuracion && items.length > 0 && persona) {
+      dibujarDepuracion(p, {
         frame,
         persona,
-        partes,
-        vinculos,
+        partes: this.ultimasPartes ?? [],
+        vinculos: items[0].vinculos,
         aPantalla: (punto) => this.aPantalla(punto),
       });
     }
 
-    this.dibujarHud({ organismo, persona, modo, pose });
+    this.dibujarHud({ items, modo, pendientes, eventos });
   }
 
-  /** Resplandor suave detrás del organismo (uno solo, barato). */
-  dibujarHalo(forma, palette) {
+  // ------------------------------------------------------------
+  // Organismos
+  // ------------------------------------------------------------
+
+  dibujarOrganismo(item, x, y, ancho, alto) {
+    const p = this.p;
+    const forma = item.organismo.shape;
+    const ajuste = calcularAjuste(forma.bounds, ancho, alto, 110);
+
+    // Easing: arranca y termina despacio.
+    const suave = item.presencia * item.presencia * (3 - 2 * item.presencia);
+
+    // Escala uniforme de todo el organismo: nunca cambia proporciones.
+    const escalaPresencia = 0.82 + 0.18 * suave;
+
+    const centroX = x + ancho / 2 + item.pose.posicion.x * p.width;
+    const centroY = y + alto / 2 + item.pose.posicion.y * p.height;
+
+    this.transformacion = {
+      centroX,
+      centroY,
+      escala: ajuste.escala * escalaPresencia,
+      formaCentroX: ajuste.centroX,
+      formaCentroY: ajuste.centroY,
+    };
+
+    const partes = aplicarPose(forma, item.pose);
+    this.ultimasPartes = partes;
+
+    p.push();
+    p.translate(centroX, centroY);
+    p.scale(ajuste.escala * escalaPresencia);
+    p.translate(-ajuste.centroX, -ajuste.centroY);
+
+    const ordenadas = [...partes].sort((a, b) => pesoDeDibujo(a) - pesoDeDibujo(b));
+
+    this.dibujarHalo(forma, item.organismo.palette, item, suave);
+    this.dibujarPartes(ordenadas, item.organismo.palette, suave);
+
+    p.pop();
+  }
+
+  /** Un solo degradado por organismo. */
+  dibujarHalo(forma, palette, item, suave) {
     const ctx = this.p.drawingContext;
     const caja = forma.bounds;
     const centroX = caja.x + caja.width / 2;
@@ -94,8 +122,15 @@ export class EscenarioView {
     const radio = Math.max(caja.width, caja.height) * 0.58;
     const halo = palette.colors.halo;
 
+    let alfa = halo.a * suave;
+
+    // Último destello al desvanecerse.
+    if (item.estado === "desvaneciendo") {
+      alfa += 0.18 * Math.sin(Math.PI * (1 - item.presencia));
+    }
+
     const gradiente = ctx.createRadialGradient(centroX, centroY, radio * 0.1, centroX, centroY, radio);
-    gradiente.addColorStop(0, `hsla(${halo.h}, ${halo.s}%, ${halo.l}%, ${halo.a})`);
+    gradiente.addColorStop(0, `hsla(${halo.h}, ${halo.s}%, ${halo.l}%, ${alfa})`);
     gradiente.addColorStop(1, `hsla(${halo.h}, ${halo.s}%, ${halo.l}%, 0)`);
 
     ctx.fillStyle = gradiente;
@@ -104,10 +139,9 @@ export class EscenarioView {
     ctx.fill();
   }
 
-  /** Cada parte con degradado claro → color → oscuro y brillo de borde. */
-  dibujarPartes(partes, palette) {
+  dibujarPartes(partes, palette, suave) {
     const ctx = this.p.drawingContext;
-    ctx.globalAlpha = 0.92;
+    ctx.globalAlpha = 0.92 * suave;
 
     for (const parte of partes) {
       if (!mostrarParte(parte)) continue;
@@ -160,6 +194,10 @@ export class EscenarioView {
     };
   }
 
+  // ------------------------------------------------------------
+  // Fondos y textos
+  // ------------------------------------------------------------
+
   dibujarFondo() {
     const p = this.p;
 
@@ -181,35 +219,66 @@ export class EscenarioView {
     p.background(11, 11, 18);
   }
 
-  dibujarHud({ organismo, persona, modo, pose }) {
+  dibujarHud({ items, modo, pendientes, eventos }) {
     const p = this.p;
-
     p.noStroke();
-    p.fill(255, 255, 255, 235);
-    p.textSize(15);
     p.textAlign(p.LEFT, p.TOP);
-    p.text(organismo.shape.name, 24, 16);
 
     p.fill(255, 255, 255, 150);
     p.textSize(12);
-    p.text(
-      `semilla ${organismo.seed} · mock ${modo} · fondo ${this.fondo} · señal ${pose.estadoSenal}`,
-      24,
-      40
-    );
+    p.text(`mock ${modo} · fondo ${this.fondo} · ${items.length} organismo(s)`, 24, 16);
 
-    p.text(
-      `energía ${persona ? persona.energy.toFixed(2) : "—"} · confianza ${
-        persona ? persona.confidence.toFixed(2) : "—"
-      } · ${this.mostrarDepuracion ? "depuración ON" : "depuración OFF"}`,
-      24,
-      58
-    );
+    items.forEach((item, indice) => {
+      const y = 40 + indice * 44;
+
+      p.fill(255, 255, 255, 235);
+      p.textSize(13);
+      p.text(
+        `${item.organismo.shape.name} · ${item.estado} · presencia ${item.presencia.toFixed(2)}`,
+        24,
+        y
+      );
+
+      p.fill(255, 255, 255, 150);
+      p.textSize(11);
+      p.text(
+        `semilla ${item.organismo.seed} · paleta ${item.organismo.palette.nombre} · sin señal ${item.tiempoSinPresencia.toFixed(2)} s`,
+        24,
+        y + 16
+      );
+    });
+
+    if (pendientes.length > 0) {
+      p.fill(0, 255, 200, 180);
+      p.textSize(11);
+      const texto = pendientes
+        .map((pendiente) => `${pendiente.personaId}: ${pendiente.tiempo.toFixed(2)} s`)
+        .join("  ");
+      p.text(`confirmando → ${texto}`, 24, 40 + items.length * 44);
+    }
+
+    if (this.mostrarEventos) {
+      p.fill(0, 0, 0, 160);
+      p.rect(p.width - 300, 16, 284, 24 + Math.min(8, eventos.length) * 16, 6);
+
+      p.fill(0, 255, 200, 220);
+      p.textSize(11);
+      p.text("eventos", p.width - 288, 24);
+
+      eventos.slice(-8).forEach((evento, indice) => {
+        p.fill(255, 255, 255, 180);
+        p.text(
+          `${evento.tipo} · semilla ${evento.semilla}`,
+          p.width - 288,
+          42 + indice * 16
+        );
+      });
+    }
 
     p.fill(255, 255, 255, 120);
     p.textSize(12);
     p.text(
-      "1–5 modo del mock      D depuración      F fondo      ESPACIO nueva semilla",
+      "1–5 modo      D depuración      E eventos      F fondo      ESPACIO nueva semilla",
       24,
       p.height - 26
     );

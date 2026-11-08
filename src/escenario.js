@@ -1,16 +1,14 @@
 // ============================================================
 // escenario.js
 //
-// Página de prueba del tracking: un organismo (o dos) controlados
-// por el MockTracker, con la pose viva y la depuración.
+// Página de prueba del ciclo de vida: los organismos nacen cuando
+// una persona válida aparece y se desvanecen cuando se va.
 //
-// ?seed=123 repite el organismo.
-// Teclas: 1–5 modo del mock · D depuración · F fondo · ESPACIO nueva semilla.
+// ?seed=123 repite la secuencia (la semilla inicial y el mock).
+// Teclas: 1–5 modo · D depuración · E eventos · F fondo · ESPACIO reiniciar.
 // ============================================================
 
-import { bornOrganism } from "./model/genome/bornOrganism.js";
-import { crearVinculos } from "./model/tracking/crearVinculos.js";
-import { OrganismPose } from "./model/tracking/OrganismPose.js";
+import { OrganismManager } from "./model/lifecycle/OrganismManager.js";
 import { MockTracker } from "./input/MockTracker.js";
 import { EscenarioView } from "./view/EscenarioView.js";
 import { EscenarioController } from "./controller/EscenarioController.js";
@@ -18,25 +16,35 @@ import { EscenarioController } from "./controller/EscenarioController.js";
 const MODOS = ["raton", "lissajous", "dos", "quieto", "perdida"];
 
 const parametros = new URLSearchParams(window.location.search);
-let semilla = parametros.get("seed") ?? undefined;
+const semillaInicial = parametros.get("seed") ?? null;
 
 let vista;
 let controlador;
+let gestor;
+
+/** Fuente de semillas determinista si hay ?seed= en la URL. */
+function crearFuenteDeSemillas() {
+  if (semillaInicial === null) return null;
+
+  let siguiente = Number(semillaInicial);
+  if (!Number.isFinite(siguiente)) return null;
+
+  return () => {
+    const semilla = siguiente;
+    siguiente += 1;
+    return semilla;
+  };
+}
 
 function armarEscenario() {
-  const organismo = bornOrganism(semilla);
-  const vinculos = crearVinculos(organismo.shape, organismo.seed);
-  const pose = new OrganismPose(organismo.shape, vinculos);
-
-  const tracker = new MockTracker({ modo: "lissajous", semilla: organismo.seed });
-
-  controlador = new EscenarioController({
-    organismo,
-    pose,
-    vinculos,
-    tracker,
-    view: vista,
+  const tracker = new MockTracker({
+    modo: "lissajous",
+    semilla: semillaInicial !== null ? Number(semillaInicial) || 1 : 1,
   });
+
+  gestor = new OrganismManager({ fuenteDeSemillas: crearFuenteDeSemillas() });
+
+  controlador = new EscenarioController({ manager: gestor, tracker, view: vista });
 }
 
 new p5((p) => {
@@ -47,7 +55,6 @@ new p5((p) => {
   };
 
   p.draw = () => {
-    // delta time en segundos, con un tope por si la pestaña estuvo dormida.
     const dt = Math.min(0.1, p.deltaTime / 1000);
 
     controlador.update(dt);
@@ -63,10 +70,11 @@ new p5((p) => {
       controlador.tracker.setModo(MODOS[Number(p.key) - 1]);
     } else if (p.key === "d" || p.key === "D") {
       vista.alternarDepuracion();
+    } else if (p.key === "e" || p.key === "E") {
+      vista.alternarEventos();
     } else if (p.key === "f" || p.key === "F") {
       vista.cambiarFondo();
     } else if (p.keyCode === 32) {
-      semilla = undefined;
       armarEscenario();
     }
   };
