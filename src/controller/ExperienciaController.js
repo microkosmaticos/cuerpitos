@@ -134,7 +134,7 @@ export class ExperienciaController {
 
     // Si el modelo dejó de avisar, se avanza el tracking con "nadie":
     // las personas pasan a LOST y los organismos empiezan a irse.
-    if (ahora - this.ultimoIngest > SIN_SENAL_MS) {
+    if (this.tracker && ahora - this.ultimoIngest > SIN_SENAL_MS) {
       this.ingestPoses([], ahora, false);
     }
 
