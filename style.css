@@ -108,3 +108,36 @@ h6 {
 #app {
   isolation: isolate;
 }
+
+/* ------------------------------------------------------------------
+   Stage 1: skeleton canvas + debug HUD
+   The canvas fills the viewport; the webcam is never painted.
+   ------------------------------------------------------------------ */
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#app canvas {
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #9ff5ff;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  white-space: pre;
+}
+
+#hud[data-error="true"] {
+  color: #ff9a9a;
+}
