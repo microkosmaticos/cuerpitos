@@ -24,7 +24,7 @@
 import {
   EMOTIONS,
   areIncompatible,
-} from "../../../reaccions.js";
+} from "../../reaccions.js";
 
 /**
  * Emociones que pueden aparecer solas. "fainted" queda afuera a

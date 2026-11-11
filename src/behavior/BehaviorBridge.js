@@ -22,7 +22,7 @@ import {
   EVENTS,
   Reacciones,
   Weights,
-} from "../../../reaccions.js";
+} from "../../reaccions.js";
 import { SocialPacer } from "./SocialPacer.js";
 
 /** Pausa mínima entre decisiones, en ms (agent.md: "habrá pausas"). */

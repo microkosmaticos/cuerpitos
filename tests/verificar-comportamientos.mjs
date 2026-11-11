@@ -13,11 +13,11 @@
 import {
   BehaviorBridge,
   PESOS,
-} from "../src/model/behavior/BehaviorBridge.js";
+} from "../src/behavior/BehaviorBridge.js";
 import {
   SocialPacer,
   EMOCIONES_ESPONTANEAS,
-} from "../src/model/behavior/SocialPacer.js";
+} from "../src/behavior/SocialPacer.js";
 import { EVENTS, Reacciones } from "../reaccions.js";
 
 /** Pacer inerte: estas pruebas aislan el motor de comportamientos. */

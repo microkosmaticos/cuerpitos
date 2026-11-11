@@ -26,3 +26,29 @@ export function calcularAjuste(bounds, anchoCanvas, altoCanvas, margen = 90) {
     centroY: bounds.y + bounds.height / 2,
   };
 }
+
+/**
+ * Ajuste "cover" para una imagen que tiene que llenar el canvas sin
+ * deformarse: escala hasta cubrir y centra. Lo que sobra se recorta.
+ *
+ * Devuelve el rectángulo donde hay que dibujar la imagen y la escala
+ * usada, para poder proyectar coordenadas normalizadas (0..1) de la
+ * imagen al canvas con la misma cuenta.
+ */
+export function calcularCubrir(anchoFuente, altoFuente, anchoCanvas, altoCanvas) {
+  if (!(anchoFuente > 0) || !(altoFuente > 0)) {
+    return { x: 0, y: 0, w: anchoCanvas, h: altoCanvas, escala: 1 };
+  }
+
+  const escala = Math.max(anchoCanvas / anchoFuente, altoCanvas / altoFuente);
+  const w = anchoFuente * escala;
+  const h = altoFuente * escala;
+
+  return {
+    x: (anchoCanvas - w) / 2,
+    y: (altoCanvas - h) / 2,
+    w,
+    h,
+    escala,
+  };
+}

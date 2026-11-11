@@ -15,8 +15,9 @@ import { congelarProfundo } from "../model/families/deepFreeze.js";
 export const VISUAL = congelarProfundo({
   // La cabeza es una excepción a agent.md ("sin rostro ni cuello").
   mostrarCabeza: true,
-  // Los ojos van como decoración de la cabeza.
-  mostrarOjos: true,
+  // agent.md: "No se reconocerán rostros ni se dibujarán caras".
+  // Los ojos decorativos quedan apagados en la experiencia final.
+  mostrarOjos: false,
 });
 
 /**
