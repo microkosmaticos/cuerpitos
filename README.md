@@ -20,13 +20,18 @@ Después abrir <http://localhost:8080/>.
 La primera vez hay que dar permiso de cámara. El modelo de pose (ml5)
 tarda unos segundos en cargar; el HUD lo muestra.
 
-### Controles
+### Arranque automático
 
-| Tecla | Acción |
-| --- | --- |
-| `F` | Cambia el fondo: cámara → cámara velada → fondo artístico |
-| `D` | Muestra los anclas del tracking y los vínculos parte ↔ ancla |
-| `H` | Oculta/muestra el HUD |
+No hay teclas ni modos que activar. Al abrir la página:
+
+1. se enciende la cámara y se muestra como fondo;
+2. se carga el modelo de pose;
+3. en cuanto una persona queda estable en el cuadro, nace su organismo;
+4. los comportamientos y las emociones empiezan solos.
+
+Si algo falla, la experiencia reintenta sola (3 veces) y el HUD explica el motivo.
+Si no aparece ningún organismo, el HUD dice qué falta: cuántas detecciones ve el
+modelo, con qué confianza, y si la persona ya está en la zona de participación.
 
 ## Qué hay en la experiencia
 
@@ -51,6 +56,9 @@ cámara  →  ml5 bodyPose (MoveNet MULTIPOSE)  →  ParticipantTracker
   personas) para que las interacciones realmente ocurran.
 - **Sin espejo**: la imagen y los datos conservan la orientación real
   de la cámara, como pide `agent.md`.
+- **Video en el DOM**: el `<video>` de la cámara se muestra detrás de un canvas
+  transparente. Si se oculta con `display:none`, Firefox deja de decodificar
+  cuadros y el modelo termina viendo negro.
 - **Sin rostro**: los ojos decorativos de los organismos están
   apagados.
 
@@ -115,6 +123,13 @@ Las pruebas no necesitan cámara ni navegador.
   MediaPipe Pose Landmarker. Cumple la detección de hasta dos personas
   con ids estables; ml5 también ofrece BlazePose (MediaPipe) cambiando
   `CONFIG.model.name`.
+- **Confianza de cintura hacia arriba**: la confianza de una persona se
+  promedia solo sobre el tren superior. Promediar los 17 keypoints hacía que
+  las piernas fuera de cuadro (confianza 0) hundieran el valor y nadie pudiera
+  participar. Lo cubre `tests/verificar-pose.mjs`.
+- **Inferencia lenta**: el bloqueo de participantes tolera hasta ~2,4 s entre
+  detecciones, para máquinas sin GPU donde MoveNet corre a pocos cuadros por
+  segundo.
 - **Espejo**: la versión de `bodypose/develop` dibujaba el esqueleto en
   espejo. Acá se sigue `agent.md`: la imagen no se voltea.
 - **Texturas**: las familias actuales son formas planas con degradado y

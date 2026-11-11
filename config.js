@@ -24,7 +24,7 @@ export const CONFIG = {
       modelType: "MULTIPOSE_LIGHTNING",
       enableSmoothing: true,
       enableTracking: true,
-      minPoseScore: 0.25,
+      minPoseScore: 0.2,
       // agent.md: the image must not be mirrored horizontally.
       flipHorizontal: false,
     },
@@ -87,18 +87,20 @@ export const CONFIG = {
     zone: { xMin: 0.15, xMax: 0.85, yMin: 0, yMax: 1 },
 
     // A candidate must stay stable this long before being locked.
-    acquireMs: 1400,
+    acquireMs: 1200,
     // How long an unmatched candidate is remembered across id changes.
-    candidateMemoryMs: 700,
+    // Generous on purpose: on CPU-only machines MoveNet can take ~1 s
+    // between inferences, and a short memory would drop everyone.
+    candidateMemoryMs: 2400,
     // Temporary occlusion tolerance per participant.
-    lostGraceMs: 2000,
+    lostGraceMs: 2500,
     // The session only resets after BOTH participants are gone this long.
     releaseBothMs: 6000,
     // Optional per-slot release when one participant stays. Disabled on
     // purpose: the empty seat stays reserved until the session ends.
     singleSlotReleaseMs: null,
     maxCandidates: 4,
-    minPoseScore: 0.25,
+    minPoseScore: 0.2,
 
     // Reference shoulder-width / frame-width ratios for the size score.
     sizeMinRatio: 0.08,

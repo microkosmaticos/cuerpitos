@@ -21,8 +21,8 @@ export class Pose {
   constructor(rawPose = {}) {
     this.raw = rawPose;
     this.keypoints = rawPose.keypoints ?? [];
-    this.score =
-      rawPose.score ?? rawPose.box?.score ?? this.computeScoreFromKeypoints();
+    this.porNombre = indexarKeypoints(this.keypoints);
+    this.score = this.computeScore(rawPose);
     this.id = rawPose.id ?? null;
     this.trackId = this.id;
 
@@ -31,8 +31,16 @@ export class Pose {
     this.scale = this.computeScale();
   }
 
+  /**
+   * Punto por nombre. ml5 expone los keypoints de dos maneras según la
+   * versión del modelo: como propiedades sueltas (`pose.left_shoulder`)
+   * o solo dentro del array con `name`. Se aceptan las dos, así el
+   * tracking no depende del formato exacto.
+   */
   get(name) {
-    return this.raw[name];
+    const directo = this.raw[name];
+    if (directo && Number.isFinite(directo.x)) return directo;
+    return this.porNombre.get(name) ?? null;
   }
 
   isVisible(name, minConfidence = CONFIG.skeleton.minConfidence) {
@@ -56,20 +64,32 @@ export class Pose {
   }
 
   /**
-   * MoveNet MULTIPOSE does not always expose a top-level or box score, so we
-   * fall back to the average keypoint confidence.
+   * Confianza de la persona.
+   *
+   * Importante: el encuadre es de cintura hacia arriba (agent.md), así
+   * que las piernas y los tobillos suelen estar fuera de cuadro con
+   * confianza 0. Promediar los 17 keypoints hunde el score y la persona
+   * nunca alcanza el mínimo para participar.
+   *
+   * Por eso se promedia SOLO el tren superior que usa la experiencia:
+   * nariz, ojos, orejas, hombros, codos, muñecas y caderas.
    */
-  computeScoreFromKeypoints() {
-    const points = this.keypoints.filter((point) =>
-      Number.isFinite(point.confidence ?? point.score)
-    );
-    if (points.length === 0) return 0;
+  computeScore(rawPose) {
+    const delModelo = rawPose.score ?? rawPose.box?.score;
+    if (Number.isFinite(delModelo) && delModelo > 0) return delModelo;
+
+    const nombres = CONFIG.skeleton.upperBody ?? [];
+    const puntos = nombres
+      .map((nombre) => this.get(nombre))
+      .filter((punto) => punto && Number.isFinite(punto.confidence ?? punto.score));
+
+    if (puntos.length === 0) return 0;
 
     return (
-      points.reduce(
-        (sum, point) => sum + (point.confidence ?? point.score ?? 0),
+      puntos.reduce(
+        (suma, punto) => suma + (punto.confidence ?? punto.score ?? 0),
         0
-      ) / points.length
+      ) / puntos.length
     );
   }
 
@@ -169,4 +189,24 @@ export class Pose {
 
     return 1;
   }
+}
+
+/**
+ * Índice nombre → keypoint, para el formato de ml5 que solo trae
+ * `{ name, x, y, confidence }` dentro del array.
+ */
+function indexarKeypoints(keypoints) {
+  const mapa = new Map();
+
+  if (!Array.isArray(keypoints)) return mapa;
+
+  for (const punto of keypoints) {
+    if (!punto) continue;
+    const nombre = punto.name ?? punto.part ?? punto.keypoint;
+    if (typeof nombre === "string" && !mapa.has(nombre)) {
+      mapa.set(nombre, punto);
+    }
+  }
+
+  return mapa;
 }

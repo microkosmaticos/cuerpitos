@@ -15,8 +15,9 @@ export const CICLO = congelarProfundo({
   confirmacion: 0.6,
 
   // Si la señal se pierde menos que esto, el organismo sigue vivo.
-  // Tapa los cortes típicos del tracker.
-  gracia: 1.2,
+  // Tapa los cortes típicos del tracker y las inferencias lentas
+  // (en máquinas sin GPU puede pasar más de un segundo entre poses).
+  gracia: 2,
 
   // Duración de la transición de nacimiento.
   nacimiento: 1.5,

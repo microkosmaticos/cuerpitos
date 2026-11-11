@@ -139,7 +139,7 @@ function correr(experiencia, segundos, alPaso = null) {
 
   // "quieto" deja una sola persona (p0).
   experiencia.mock.setModo("quieto");
-  correr(experiencia, 4);
+  correr(experiencia, 5);
 
   const items = experiencia.controller.items;
   comprobar(items.length === 1, "debería quedar un solo organismo");

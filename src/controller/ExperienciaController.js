@@ -19,7 +19,7 @@ import { crearVinculos } from "../model/tracking/crearVinculos.js";
 import { OrganismPose } from "../model/tracking/OrganismPose.js";
 
 /** Si no llega ninguna pose en este tiempo, se asume que no hay señal. */
-export const SIN_SENAL_MS = 700;
+export const SIN_SENAL_MS = 2500;
 
 /** Cuántos eventos de ciclo de vida se guardan para depuración. */
 const MAX_EVENTOS = 40;
@@ -62,6 +62,11 @@ export class ExperienciaController {
     this.fps = 0;
     this.mensaje = null;
 
+    // Diagnóstico para el HUD: qué ve el modelo y en qué anda.
+    this.detecciones = 0;
+    this.mejorConfianza = 0;
+    this.candidatos = 0;
+
     this.ultimoIngest = 0;
     this._frames = 0;
     this._ventana = 0;
@@ -83,6 +88,12 @@ export class ExperienciaController {
 
     const resultado = this.tracker.update(poses, ahora);
     this.ingestFrame(this.adapter.update(resultado, ahora), ahora, resultado);
+
+    this.detecciones = poses.length;
+    this.mejorConfianza = poses.reduce(
+      (mejor, pose) => Math.max(mejor, pose.score ?? 0),
+      0
+    );
 
     if (!contar) return this.frame;
 
@@ -139,6 +150,8 @@ export class ExperienciaController {
     }
 
     const resultado = this.manager.update(dt, this.frame);
+
+    this.candidatos = this.tracker?.candidates?.length ?? 0;
 
     this.registrarEventos(resultado.eventos);
     this.actualizarPoses(resultado.organismos, dt);
@@ -229,6 +242,11 @@ export class ExperienciaController {
       participantes: this.participantes,
       fps: this.fps,
       mensaje: this.mensaje,
+      diagnostico: {
+        detecciones: this.detecciones,
+        mejorConfianza: this.mejorConfianza,
+        candidatos: this.candidatos,
+      },
     });
   }
 

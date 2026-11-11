@@ -141,3 +141,27 @@ h6 {
 #hud[data-error="true"] {
   color: #ff9a9a;
 }
+
+/* ------------------------------------------------------------------
+   Experiencia final: el video de la cámara vive en el DOM, detrás del
+   canvas transparente que dibuja los organismos y el HUD.
+   (Algunos navegadores dejan de decodificar un <video> oculto, por eso
+   el video se muestra de verdad.)
+   ------------------------------------------------------------------ */
+
+#camara-fondo {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  background: #0b0b12;
+}
+
+.lienzo-experiencia {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+}

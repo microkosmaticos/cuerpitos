@@ -8,12 +8,17 @@ import { CONFIG } from "./config.js";
  * without touching the rest of the app.
  */
 export class CameraModel {
-  constructor() {
+  /**
+   * @param {object} opciones
+   * @param {boolean} opciones.visible si el video se muestra detrás del canvas
+   */
+  constructor({ visible = false } = {}) {
     this.video = null;
     this.stream = null;
     this.width = 0;
     this.height = 0;
     this.ready = false;
+    this.visible = visible;
   }
 
   async start() {
@@ -41,9 +46,15 @@ export class CameraModel {
     video.muted = true;
     video.playsInline = true;
     video.setAttribute("aria-hidden", "true");
-    // Hidden but alive: the element keeps decoding frames for the model even
-    // though nothing is painted on screen.
-    video.style.display = "none";
+
+    if (this.visible) {
+      // Se muestra de verdad (detrás del canvas): algunos navegadores,
+      // como Firefox, dejan de decodificar frames de un <video> oculto.
+      video.id = "camara-fondo";
+    } else {
+      video.style.display = "none";
+    }
+
     video.srcObject = this.stream;
     document.body.appendChild(video);
 

@@ -92,3 +92,32 @@ L1 (pedido del usuario, verbatim):
   prueba con una persona real es lo que falta validar en el navegador del usuario.
 - El HUD muestra los fps de detección: en headless con CPU da 1; en la máquina real debería
   ser mucho mayor.
+
+### Ronda 2 — arranque automático y cámara real (11/11)
+
+Reporte del usuario: "no funciona nada, todo se debe iniciar automáticamente, quita
+estas activaciones por teclas".
+
+Cambios:
+- Se quitaron las teclas F / D / H de la experiencia: el fondo es siempre la cámara, el
+  HUD siempre visible y la depuración ya no se activa a mano (T4 revisado).
+- **Bug real 1**: el `<video>` de la cámara estaba en `display:none`. Firefox deja de
+  decodificar cuadros de un video oculto, así que el modelo veía negro y nunca detectaba a
+  nadie. Ahora el video se muestra en el DOM detrás de un canvas transparente
+  (`#camara-fondo` + `.lienzo-experiencia`); el canvas hace `clear()` y dibuja organismos y
+  HUD encima.
+- **Bug real 2**: `Pose` promediaba la confianza de los 17 keypoints. Con encuadre de
+  cintura hacia arriba las piernas valen 0 y la persona no llegaba al mínimo de 0.6. Ahora
+  promedia solo el tren superior, y acepta keypoints por nombre desde el array o como
+  propiedades sueltas.
+- **Bug real 3**: la memoria de candidatos era 700 ms. Si MoveNet tarda ~1 s por inferencia
+  (CPU), el candidato se borraba antes de bloquearse. Ahora 2400 ms; `SIN_SENAL_MS` 2500 ms;
+  `gracia` del ciclo 2 s.
+- Arranque con 3 reintentos automáticos y límite de 45 s para la carga del modelo. El HUD
+  muestra detecciones, confianza y candidatos para explicar por qué aún no hay organismo.
+- Prueba nueva `tests/verificar-pose.mjs` (15 comprobaciones).
+
+Verificado en Chrome headless con caché desactivada: video visible y decodificando
+(`readyState 4`, `object-fit: cover`), canvas fijo transparente, y el camino REAL
+(`ingestPoses` con poses crudas al estilo ml5, piernas en 0) hace nacer un organismo vivo
+con confianza 0.88. Las siete páginas cargan sin errores.
