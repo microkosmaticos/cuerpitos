@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/participants.test.js"
+    "test": "npm run test:unit && npm run test:modelo",
+    "test:unit": "node --test tests/participants.test.js reaccions.test.mjs",
+    "test:modelo": "node tests/verificar-seeded-random.mjs && node tests/verificar-familias.mjs && node tests/verificar-paletas.mjs && node tests/verificar-genomas.mjs && node tests/verificar-composicion.mjs && node tests/verificar-ciclo.mjs && node tests/verificar-tracking.mjs && node tests/verificar-adaptador.mjs && node tests/verificar-comportamientos.mjs && node tests/verificar-experiencia.mjs",
+    "serve": "python3 -m http.server 8080"
   }
 }

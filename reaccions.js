@@ -796,10 +796,25 @@ const reacciones = {
   BehaviorEngine,
 };
 
-// UMD mínimo: navegador (window.reacciones) y Node (module.exports).
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = reacciones;
-}
+// Navegador: el módulo también queda disponible como global para las
+// consolas de depuración. La vía oficial es el import ES.
 if (typeof window !== 'undefined') {
   window.reacciones = reacciones;
 }
+
+export {
+  EMOTIONS,
+  RELATIONSHIPS,
+  EVENTS,
+  CATALOG,
+  areIncompatible,
+  OrganismState,
+  Emitter,
+  Reacciones,
+  Weights,
+  weightedPick,
+  getEligibleEvents,
+  BehaviorEngine,
+};
+
+export default reacciones;

@@ -1,24 +1,24 @@
 'use strict';
 
 /**
- * reaccions.test.js — Pruebas automatizadas del módulo de comportamientos.
+ * reaccions.test.mjs — Pruebas automatizadas del módulo de comportamientos.
  *
  * Usa el runner nativo de Node (`node:test`), sin dependencias externas y sin
  * webcam ni organismos visuales. Se ejecuta con:
  *
- *   node --test
+ *   npm test
  *
  * o, para correr solo este archivo:
  *
- *   node --test reaccions.test.js
+ *   node --test reaccions.test.mjs
  *
  * Los organismos son solo identificadores (strings); no dependen de bodies.js.
  */
 
-const { describe, it } = require('node:test');
-const assert = require('node:assert/strict');
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
 
-const {
+import {
   EMOTIONS,
   RELATIONSHIPS,
   EVENTS,
@@ -31,7 +31,7 @@ const {
   weightedPick,
   getEligibleEvents,
   BehaviorEngine,
-} = require('./reaccions.js');
+} from './reaccions.js';
 
 // ---------------------------------------------------------------------------
 // B01 — Catálogo de emociones
