@@ -66,6 +66,30 @@ cámara  →  ml5 bodyPose (MoveNet MULTIPOSE)  →  ParticipantTracker
 | `fondo.html` | Fondo artístico animado (olas y estrellas) |
 | `esqueleto.html` | Depuración del tracking: esqueleto y participantes |
 
+## Consola del navegador
+
+`soporte/sin-sensores.js` se carga antes que p5 en todas las páginas y evita que p5
+registre las escuchas de `deviceorientation` y `devicemotion` (no se usan: el movimiento
+viene de la cámara). Eso saca los avisos de Firefox:
+
+```
+El uso del sensor de orientación está obsoleto.
+El uso del sensor de movimiento está obsoleto.
+```
+
+El error de **mapa de fuente** de ml5 no lo produce la página:
+
+```
+Error de mapa de fuente: Error: URL constructor: is not a valid URL.
+... wasm:https://cdn.jsdelivr.net/npm/ml5@1.4.0/dist/ml5.min.js ... > WebAssembly.Module
+```
+
+Es el depurador de Firefox intentando resolver el mapa de un módulo WebAssembly que ml5
+compila internamente al cargar. No hay URL que resolver y el depurador se queja; no afecta
+la ejecución. Desaparece cerrando las herramientas de desarrollo o usando Chrome. Para
+eliminarlo del todo habría que reemplazar ml5 por MediaPipe Pose Landmarker, que es lo que
+propone `agent.md`.
+
 ## Pruebas
 
 ```bash
