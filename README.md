@@ -148,9 +148,18 @@ Las pruebas no necesitan cámara ni navegador.
 
 ## Mapa del código
 
+La experiencia se lee como cuatro piezas: **fondo → cuerpo → avatares → reacciones**.
+
 ```
-camera.js, bodypose.js, participants.js, pose.js, config.js, skeleton-view.js
-   Tracking real de la etapa 1 (se conserva tal cual).
+enviroment.js
+   Fondo artístico original (base, olas y estrellas).
+src/view/FondoArtistico.js
+   Ese mismo fondo en modo instancia, compartiendo el canvas.
+camera.js, bodypose.js, participants.js, pose.js, config.js
+   Reconocimiento de cuerpo: cámara, ml5 bodyPose, bloqueo de participantes.
+bodies.js
+   LOS AVATARES: punto de entrada del modelo de organismos.
+   Reúne familias, paletas, genoma, ciclo de vida y pose viva de src/model/**.
 reaccions.js
    Catálogo de emociones/relaciones/eventos y motor de selección.
 src/input/TrackingAdapter.js
@@ -161,8 +170,6 @@ src/behavior/BehaviorBridge.js
    Alta/baja de organismos y directivas → estado visual.
 src/behavior/SocialPacer.js
    Emociones espontáneas y relaciones de pareja.
-src/view/FondoArtistico.js
-   El fondo de enviroment.js en modo instancia (base, olas y estrellas).
 src/view/ExperienciaView.js
    Organismos encima del fondo, HUD y efectos.
 src/view/efectos.js

@@ -138,3 +138,21 @@ está en el archivo enviroment.js".
   organismos + HUD (con panel tenue para legibilidad sobre la obra).
 - Verificado en Chrome headless sin caché: fondo animado completo, organismo vivo
   encima, HUD legible, siete páginas sin errores. `npm test` en verde.
+
+### Ronda 4 — bodies.js como entrada de los avatares (11/11)
+
+Pedido: "une bodies.js tiene los avatares, esos avatares responden al reconocimiento de
+bodypose.js y después actúan según las especificaciones de reaccions.js".
+
+- `bodies.js` estaba vacío (0 bytes). Ahora es el punto de entrada único del modelo de
+  avatares: reexporta `OrganismManager`, `bornOrganism`, `crearVinculos`, `OrganismPose`,
+  `ESTADOS`, límites y anclas de `src/model/**`, sin duplicar código, y documenta la cadena
+  fondo → cuerpo → avatares → reacciones.
+- `src/experiencia.js` y `ExperienciaController` ahora importan los avatares desde
+  `bodies.js`, igual que ya importaban el cuerpo desde `bodypose.js` y las reacciones desde
+  `reaccions.js`.
+- Prueba nueva dentro de `verificar-experiencia.mjs`: el punto de entrada expone la API y
+  `bornOrganism` devuelve id, forma y paleta.
+- Verificado en Chrome headless con dos poses crudas inyectadas: dos avatares vivos,
+  emociones distintas (`lovestruck`, `fainted`), relación `mutual_love` y eventos
+  (`limb_stretch`, `faint`) sobre el fondo artístico, sin errores.

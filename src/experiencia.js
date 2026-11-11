@@ -19,7 +19,7 @@ import { CameraModel } from "../camera.js";
 import { BodyPoseModel } from "../bodypose.js";
 import { ParticipantTracker } from "../participants.js";
 import { TrackingAdapter } from "./input/TrackingAdapter.js";
-import { OrganismManager } from "./model/lifecycle/OrganismManager.js";
+import { OrganismManager } from "../bodies.js";
 import { BehaviorBridge } from "./behavior/BehaviorBridge.js";
 import { ExperienciaView } from "./view/ExperienciaView.js";
 import { crearFondoArtistico } from "./view/FondoArtistico.js";

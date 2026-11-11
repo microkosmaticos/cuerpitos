@@ -14,7 +14,12 @@
 // ============================================================
 
 import { MockTracker } from "../src/input/MockTracker.js";
-import { OrganismManager } from "../src/model/lifecycle/OrganismManager.js";
+import {
+  OrganismManager,
+  OrganismPose,
+  crearVinculos,
+  bornOrganism,
+} from "../bodies.js";
 import { BehaviorBridge } from "../src/behavior/BehaviorBridge.js";
 import { ExperienciaController } from "../src/controller/ExperienciaController.js";
 import { EMOTIONS } from "../reaccions.js";
@@ -77,6 +82,30 @@ function correr(experiencia, segundos, alPaso = null) {
 
     if (alPaso) alPaso(experiencia, i);
   }
+}
+
+// ------------------------------------------------------------
+// 0. El punto de entrada de los avatares
+// ------------------------------------------------------------
+
+{
+  const reporte = crearReporte("bodies.js: API de avatares");
+  const comprobar = comprobarEn(reporte);
+
+  comprobar(typeof OrganismManager === "function", "falta OrganismManager");
+  comprobar(typeof OrganismPose === "function", "falta OrganismPose");
+  comprobar(typeof crearVinculos === "function", "falta crearVinculos");
+  comprobar(typeof bornOrganism === "function", "falta bornOrganism");
+
+  const organismo = bornOrganism(123);
+  comprobar(
+    organismo.shape && organismo.palette && organismo.seed === 123,
+    "bornOrganism debería devolver un avatar con forma y paleta"
+  );
+  comprobar(
+    organismo.id === `${organismo.familyId}:${organismo.seed}`,
+    "el id del avatar debería incluir familia y semilla"
+  );
 }
 
 // ------------------------------------------------------------

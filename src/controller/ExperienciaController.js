@@ -15,8 +15,7 @@
 // ============================================================
 
 import { Pose } from "../../pose.js";
-import { crearVinculos } from "../model/tracking/crearVinculos.js";
-import { OrganismPose } from "../model/tracking/OrganismPose.js";
+import { crearVinculos, OrganismPose } from "../../bodies.js";
 
 /** Si no llega ninguna pose en este tiempo, se asume que no hay señal. */
 export const SIN_SENAL_MS = 2500;
