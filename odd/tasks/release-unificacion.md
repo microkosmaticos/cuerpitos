@@ -121,3 +121,20 @@ Verificado en Chrome headless con caché desactivada: video visible y decodifica
 (`readyState 4`, `object-fit: cover`), canvas fijo transparente, y el camino REAL
 (`ingestPoses` con poses crudas al estilo ml5, piernas en 0) hace nacer un organismo vivo
 con confianza 0.88. Las siete páginas cargan sin errores.
+
+### Ronda 3 — fondo artístico de enviroment.js (11/11)
+
+Pedido: "no hagas que el fondo sea negro, respeta el fondo que ya te dije que era,
+está en el archivo enviroment.js".
+
+- La experiencia usa como fondo la composición de `enviroment.js`: capa base
+  `fondo-cuerpitos-01.svg`, olas ondulando por franjas y estrellas con brillo propio.
+- Se adaptó a modo instancia en `src/view/FondoArtistico.js` (misma matemática: cover
+  sobre 2880 x 1800, mismas amplitudes, mismos períodos). `enviroment.js` queda intacto
+  para `fondo.html`.
+- La cámara ya no se muestra: solo detecta. El `<video>` sigue en el DOM (no
+  `display:none`) para que Firefox decodifique, pero queda detrás del canvas opaco.
+- La vista dejó de pintar fondo y velo: pinta el fondo artístico y después los
+  organismos + HUD (con panel tenue para legibilidad sobre la obra).
+- Verificado en Chrome headless sin caché: fondo animado completo, organismo vivo
+  encima, HUD legible, siete páginas sin errores. `npm test` en verde.

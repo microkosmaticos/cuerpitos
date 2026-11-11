@@ -20,11 +20,22 @@ Después abrir <http://localhost:8080/>.
 La primera vez hay que dar permiso de cámara. El modelo de pose (ml5)
 tarda unos segundos en cargar; el HUD lo muestra.
 
+### Fondo
+
+El fondo es la composición artística de `enviroment.js`: la capa base
+(`fondo-cuerpitos-01.svg`), las olas ondulando y las estrellas con brillo propio.
+`src/view/FondoArtistico.js` es esa misma composición adaptada al modo instancia de
+p5 para compartir el canvas con los organismos; la composición, la matemática y los
+ajustes son los mismos. La página `fondo.html` sigue usando el sketch original.
+
+La cámara **no se muestra**: se enciende solo para detectar personas. El fondo nunca
+queda negro, porque la primera capa del fondo ya cubre toda la pantalla.
+
 ### Arranque automático
 
 No hay teclas ni modos que activar. Al abrir la página:
 
-1. se enciende la cámara y se muestra como fondo;
+1. se pinta el fondo artístico y se enciende la cámara (sin mostrarla);
 2. se carga el modelo de pose;
 3. en cuanto una persona queda estable en el cuadro, nace su organismo;
 4. los comportamientos y las emociones empiezan solos.
@@ -56,9 +67,9 @@ cámara  →  ml5 bodyPose (MoveNet MULTIPOSE)  →  ParticipantTracker
   personas) para que las interacciones realmente ocurran.
 - **Sin espejo**: la imagen y los datos conservan la orientación real
   de la cámara, como pide `agent.md`.
-- **Video en el DOM**: el `<video>` de la cámara se muestra detrás de un canvas
-  transparente. Si se oculta con `display:none`, Firefox deja de decodificar
-  cuadros y el modelo termina viendo negro.
+- **Video en el DOM**: la cámara se usa solo para detectar, pero el `<video>` no se
+  oculta con `display:none` (Firefox deja de decodificar cuadros de un video oculto
+  y el modelo termina viendo negro). Queda en el DOM, detrás del canvas opaco.
 - **Sin rostro**: los ojos decorativos de los organismos están
   apagados.
 
@@ -150,8 +161,10 @@ src/behavior/BehaviorBridge.js
    Alta/baja de organismos y directivas → estado visual.
 src/behavior/SocialPacer.js
    Emociones espontáneas y relaciones de pareja.
+src/view/FondoArtistico.js
+   El fondo de enviroment.js en modo instancia (base, olas y estrellas).
 src/view/ExperienciaView.js
-   Cámara de fondo, organismos encima, HUD y depuración.
+   Organismos encima del fondo, HUD y efectos.
 src/view/efectos.js
    Emociones y comportamientos → números para la vista.
 src/controller/ExperienciaController.js

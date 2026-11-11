@@ -22,6 +22,7 @@ import { TrackingAdapter } from "./input/TrackingAdapter.js";
 import { OrganismManager } from "./model/lifecycle/OrganismManager.js";
 import { BehaviorBridge } from "./behavior/BehaviorBridge.js";
 import { ExperienciaView } from "./view/ExperienciaView.js";
+import { crearFondoArtistico } from "./view/FondoArtistico.js";
 import { ExperienciaController } from "./controller/ExperienciaController.js";
 
 /** Intentos automáticos antes de rendirse. */
@@ -34,6 +35,7 @@ const ESPERA_ENTRE_INTENTOS = 2000;
 const LIMITE_DEL_MODELO = 45000;
 
 let vista;
+let fondo;
 let controlador;
 let camara;
 let modelo;
@@ -95,11 +97,19 @@ async function arrancar() {
 
 new p5((p) => {
   vista = new ExperienciaView(p);
+  fondo = crearFondoArtistico(p);
+
+  p.preload = () => {
+    fondo.precargar();
+  };
 
   p.setup = () => {
     p.createCanvas(p.windowWidth, p.windowHeight);
     p.pixelDensity(1);
     p.canvas.classList.add("lienzo-experiencia");
+
+    // El fondo artístico se analiza una sola vez, con el canvas ya creado.
+    fondo.configurar();
 
     tracker = new ParticipantTracker();
     adaptador = new TrackingAdapter({ ancho: 640, alto: 480 });
@@ -123,6 +133,9 @@ new p5((p) => {
 
   p.draw = () => {
     const dt = Math.min(0.1, p.deltaTime / 1000);
+
+    // Fondo primero: repinta toda la pantalla y limpia el cuadro anterior.
+    fondo.dibujar();
 
     controlador.update(dt);
     controlador.render();

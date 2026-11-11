@@ -1,18 +1,18 @@
 // ============================================================
 // ExperienciaView.js
 //
-// LA VISTA de la experiencia final: cámara de fondo + organismos
-// encima + HUD.
+// LA VISTA de la experiencia final: organismos encima del fondo
+// artístico + HUD.
 //
-// Todo es AUTOMÁTICO: no hay teclas ni modos. La cámara es siempre el
-// fondo, el HUD está siempre visible y la depuración no se activa a
-// mano; el HUD cuenta lo que hace falta para entender por qué todavía
-// no apareció nadie.
+// Todo es AUTOMÁTICO: no hay teclas ni modos. El fondo lo pinta
+// FondoArtistico.js (la composición de enviroment.js) antes de esta
+// vista; acá solo se dibujan los organismos y el HUD.
 //
-// - La cámara se dibuja con ajuste "cover" y SIN espejo (agent.md).
+// - La cámara no se muestra: solo se usa para detectar. El fondo es
+//   la obra de enviroment.js.
 // - Cada organismo se ubica en el centro de SU persona, proyectado
-//   con el mismo rectángulo que la cámara: así lo que se ve coincide
-//   con el cuerpo detectado.
+//   con el rectángulo "cover" del video de la cámara: la posición en
+//   pantalla respeta dónde está la persona.
 // - El tamaño del organismo sale del ancho de hombros de la persona.
 // - Las emociones y comportamientos se traducen con efectos.js; esta
 //   vista solo los aplica.
@@ -36,9 +36,6 @@ const ANCHO_MAXIMO = 0.5;
 
 /** Alto máximo del organismo, en fracción del canvas. */
 const ALTO_MAXIMO = 0.58;
-
-/** Velo sobre la cámara para mejorar el contraste (agent.md, sección 9). */
-const VELO = 0.2;
 
 export class ExperienciaView {
   /**
@@ -79,8 +76,6 @@ export class ExperienciaView {
 
     const rect = this.rectDeCamara(camara);
 
-    this.dibujarFondo();
-
     // Proyección de coordenadas normalizadas del video al canvas.
     this.proyectar = (punto) => ({
       x: rect.x + punto.x * rect.w,
@@ -120,25 +115,6 @@ export class ExperienciaView {
     }
 
     return calcularCubrir(camara.width, camara.height, p.width, p.height);
-  }
-
-  // ------------------------------------------------------------
-  // Fondo
-  // ------------------------------------------------------------
-
-  /**
-   * El video de la cámara se muestra en el DOM, detrás del canvas. Acá
-   * solo se limpia el canvas (transparente) y se agrega el velo de
-   * contraste. Así el navegador decodifica el video normalmente y no
-   * hay que redibujarlo en cada cuadro.
-   */
-  dibujarFondo() {
-    const p = this.p;
-
-    p.clear();
-    p.noStroke();
-    p.fill(16, 10, 30, 255 * VELO);
-    p.rect(0, 0, p.width, p.height);
   }
 
   // ------------------------------------------------------------
@@ -382,7 +358,12 @@ export class ExperienciaView {
     const p = this.p;
     const minimo = CICLO.presencia.confianzaMinima;
 
+    // Panel tenue detrás del texto: el fondo artístico es luminoso.
+    const altoPanel = 26 + (items.length === 0 ? 40 : 40 + items.length * 38);
     p.noStroke();
+    p.fill(8, 6, 20, 105);
+    p.rect(12, 8, 430, altoPanel, 10);
+
     p.textAlign(p.LEFT, p.TOP);
 
     // Estado del tracking, siempre visible y sin teclas.
