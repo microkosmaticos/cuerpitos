@@ -25,11 +25,14 @@ import { calcularEfecto } from "./efectos.js";
 export const FONDOS = ["camara", "camara-velada", "arte"];
 
 /** Ancho del organismo medido en anchos de hombros de su persona. */
-const ANCHO_EN_HOMBROS = 2.6;
+const ANCHO_EN_HOMBROS = 1.7;
 
 /** Tamaño mínimo y máximo del organismo, en fracción del canvas. */
 const ANCHO_MINIMO = 0.12;
-const ANCHO_MAXIMO = 0.62;
+const ANCHO_MAXIMO = 0.5;
+
+/** Alto máximo del organismo, en fracción del canvas. */
+const ALTO_MAXIMO = 0.58;
 
 /** Archivos del fondo artístico (mismo tablero de 2880 x 1800). */
 const CAPAS = {
@@ -235,7 +238,14 @@ export class ExperienciaView {
       p.width * ANCHO_MAXIMO
     );
 
-    let escala = forma.bounds.width > 0 ? anchoAcotado / forma.bounds.width : 1;
+    const escalaPorAncho =
+      forma.bounds.width > 0 ? anchoAcotado / forma.bounds.width : 1;
+    const escalaPorAlto =
+      forma.bounds.height > 0
+        ? (p.height * ALTO_MAXIMO) / forma.bounds.height
+        : Infinity;
+
+    let escala = Math.min(escalaPorAncho, escalaPorAlto);
 
     // Easing de presencia: arranca y termina despacio.
     const suave = item.presencia * item.presencia * (3 - 2 * item.presencia);

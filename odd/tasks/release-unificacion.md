@@ -2,7 +2,7 @@
 
 Objetivo: una sola rama `release/0.1.0` con el juego integrado y probable en el navegador.
 Branch: `release/0.1.0`. Entrega: work-unit commits en la rama. Runner: `npm test` (node test + scripts propios).
-Estado: en curso.
+Estado: cerrada (lista para probar).
 
 ## Specs
 
@@ -44,11 +44,11 @@ S9. Privacidad y sin espejo: la cámara se procesa en el navegador, no se graba 
 
 ## Tasks
 
-- T1 · S1, S8 — `reaccions.js` como módulo ES + test `.mjs` + scripts de `package.json`. inline
-- T2 · S4 — adaptador `Pose`/`ParticipantTracker` → contrato de tracking + tests. inline
-- T3 · S5 — puente de comportamientos (alta/baja de organismos, directivas → estado visual) + test. inline
-- T4 · S2, S3, S6 — controlador y vistas de la experiencia, entrada y `index.html` + páginas. inline
-- T5 · S7, S9 — README de uso, verificación final y documentación de pendientes. inline
+- [x] T1 · S1, S8 — `reaccions.js` como módulo ES + test `.mjs` + scripts de `package.json`. inline
+- [x] T2 · S4 — adaptador `Pose`/`ParticipantTracker` → contrato de tracking + tests. inline
+- [x] T3 · S5 — puente de comportamientos (alta/baja de organismos, directivas → estado visual) + test. inline
+- [x] T4 · S2, S3, S6 — controlador y vistas de la experiencia, entrada y `index.html` + páginas. inline
+- [x] T5 · S7, S9 — README de uso, verificación final y documentación de pendientes. inline
 
 ## Log
 
@@ -68,3 +68,27 @@ L1 (pedido del usuario, verbatim):
   conserva como `fondo.html` y como capa opcional conmutables con una tecla.
 - Verificación base: `tests/verificar-*.mjs` OK, `tests/participants.test.js` OK, `reaccions.test.js`
   falla solo por el cambio de `package.json` (ver arriba).
+
+### Verificación (11/11)
+
+- `npm test`: 10 suites OK (participantes 28, reacciones 98, familias 824, paletas 27,
+  genomas 50, composición 9, ciclo 51, tracking 111, adaptador 31, comportamientos 39,
+  experiencia 23).
+- Chrome headless con cámara falsa: la página abre, la cámara arranca (640x480), ml5 carga
+  el modelo, no hay excepciones de JS. El WebGL no existe en headless, así que la detección
+  corre en CPU a ~1 fps (en una máquina real con GPU no aplica).
+- Prueba visual con el tracker falso manejado por CDP: dos organismos nacen, se ubican en el
+  centro de su persona, adoptan familias y paletas distintas, reciben emociones del
+  `SocialPacer` y ejecutan eventos (`euphoric_burst` al 77 %) sin errores.
+- Fondo artístico conmutado con F: las tres capas se componen a pantalla completa.
+- Páginas `formas`, `escenario`, `galeria`, `organismos`, `fondo` y `esqueleto`: las seis
+  dibujan canvas y no lanzan errores.
+
+### Pendientes detectados
+
+- Sonido: no implementado (no hay assets).
+- El modelo real es ml5 MoveNet; el seguimiento real no se pudo probar con una persona en
+  cámara desde este entorno, solo con la cámara falsa (sin persona detectada). La primera
+  prueba con una persona real es lo que falta validar en el navegador del usuario.
+- El HUD muestra los fps de detección: en headless con CPU da 1; en la máquina real debería
+  ser mucho mayor.
