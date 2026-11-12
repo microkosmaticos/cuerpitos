@@ -419,6 +419,119 @@ test("small and large bodies differ in scale, not in shape", () => {
   assert.ok(small.head.y > big.head.y, "the small head sits closer to the chest");
 });
 
+test("every body rolls exactly one accessory", () => {
+  const seen = new Set();
+
+  for (let seed = 1; seed <= 60; seed += 1) {
+    const { accessory } = FigureProportions.create(seed);
+    assert.ok(CONFIG.figure.accessories.includes(accessory), accessory);
+    seen.add(accessory);
+  }
+
+  assert.deepEqual(
+    [...seen].sort(),
+    [...CONFIG.figure.accessories].sort()
+  );
+});
+
+test("a flower sits on a corner of the head", () => {
+  const shapes = makeFigure({ accessory: "flower" }).shapes(makePose());
+  const circles = shapes.filter((shape) => shape.kind === "circle");
+  // Two shoulders, two elbows, two hands, head, five petals, flower centre.
+  assert.equal(circles.length, 13);
+
+  const flower = circles.slice(-6);
+  const petals = flower.filter((shape) => shape.accent);
+  assert.equal(petals.length, 5);
+
+  const head = circles[circles.length - 7];
+  assert.ok(!head.accent, "the head is not part of the flower");
+  for (const petal of petals) {
+    const distance = Math.hypot(petal.x - head.x, petal.y - head.y);
+    assert.ok(distance < head.radius * 1.2, "flower stays on the head");
+  }
+  assert.ok(flower[5].x > head.x, "flower is on a corner");
+});
+
+test("a hat sits on top of the head", () => {
+  const shapes = makeFigure({ accessory: "hat" }).shapes(makePose());
+  const rectangles = shapes.filter((shape) => shape.kind === "rectangle");
+  // Chest, four arm segments, crown and brim.
+  assert.equal(rectangles.length, 7);
+
+  const hat = rectangles.filter((shape) => shape.accent);
+  assert.equal(hat.length, 2);
+
+  const head = shapes
+    .filter((shape) => shape.kind === "circle")
+    .find((shape) => !shape.accent && shape.radius === 30);
+
+  for (const piece of hat) {
+    assert.ok(piece.y < head.y, "hat sits above the head centre");
+    approx(piece.x, 320, "hat is centred on the head");
+  }
+});
+
+test("a necklace sits over the chest", () => {
+  const shapes = makeFigure({ accessory: "necklace" }).shapes(makePose());
+  const necklace = shapes.filter((shape) => shape.accent);
+
+  assert.equal(necklace.length, 2);
+  assert.equal(necklace[0].kind, "ellipse");
+  assert.equal(necklace[1].kind, "circle");
+  approx(necklace[0].x, 320, "band x");
+  approx(necklace[0].y, 209, "band y");
+  approx(necklace[1].y, 220, "pendant y");
+});
+
+test("the accessory scales with the body", () => {
+  const shapes = makeFigure({ accessory: "flower", size: 1.5 }).shapes(
+    makePose()
+  );
+  const accessory = shapes.filter(
+    (shape) => shape.kind === "circle" && !shape.accent
+  );
+  const center = accessory[accessory.length - 1];
+
+  approx(center.x, 344.75, "flower x");
+  approx(center.y, 47.75, "flower y");
+});
+
+test("hats and flowers stay above the head when eye labels are mirrored", () => {
+  const swappedEyes = makePose({
+    left_eye: { x: 330, y: 110 },
+    right_eye: { x: 310, y: 110 },
+  });
+
+  for (const accessory of ["hat", "flower"]) {
+    const shapes = makeFigure({ accessory }).shapes(swappedEyes);
+    const head = shapes
+      .filter((shape) => shape.kind === "circle")
+      .find((shape) => !shape.accent && shape.radius === 30);
+
+    const pieces = shapes.filter((shape) => shape.accent);
+    assert.ok(pieces.length > 0, `${accessory} has parts`);
+    for (const piece of pieces) {
+      assert.ok(piece.y < head.y, `${accessory} stays above the head`);
+    }
+  }
+});
+
+test("the necklace stays below the chest when shoulder labels are mirrored", () => {
+  const swappedShoulders = makePose({
+    left_shoulder: { x: 370, y: 200 },
+    right_shoulder: { x: 270, y: 200 },
+  });
+  const necklace = makeFigure({ accessory: "necklace" })
+    .shapes(swappedShoulders)
+    .filter((shape) => shape.accent);
+
+  assert.equal(necklace.length, 2);
+  for (const piece of necklace) {
+    assert.ok(piece.y > 200, "necklace stays over the chest");
+  }
+});
+
 test("no head reference means no head circle", () => {
   const shapes = makeFigure().shapes(
     makePose({

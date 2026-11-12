@@ -43,18 +43,22 @@ export class SeededRandom {
  * - armLength: multiplies both arm segments along the detected direction.
  * - headSize: head radius as a fraction of the detected shoulder width.
  * - size: whole-body scale around the chest (small .. large character).
+ * - accessory: one random prop, rolled at birth ("flower", "hat" or
+ *   "necklace"), kept for the whole session.
  */
 export class FigureProportions {
-  constructor({ seed, girth, armLength, headSize, size = 1 }) {
+  constructor({ seed, girth, armLength, headSize, size = 1, accessory = null }) {
     this.seed = seed >>> 0;
     this.girth = girth;
     this.armLength = armLength;
     this.headSize = headSize;
     this.size = size;
+    this.accessory = accessory;
   }
 
   static create(seed, ranges = CONFIG.figure.proportions) {
     const random = new SeededRandom(seed);
+    const accessories = CONFIG.figure.accessories ?? [];
 
     return new FigureProportions({
       seed,
@@ -62,6 +66,10 @@ export class FigureProportions {
       armLength: random.float(ranges.armLength[0], ranges.armLength[1]),
       headSize: random.float(ranges.headSize[0], ranges.headSize[1]),
       size: random.float(ranges.size[0], ranges.size[1]),
+      accessory:
+        accessories.length > 0
+          ? accessories[Math.floor(random.next() * accessories.length)]
+          : null,
     });
   }
 
@@ -253,6 +261,8 @@ export class GeometricFigure {
       shapes.push(...this.eyeShapes(pose, base, now));
     }
 
+    shapes.push(...this.accessoryShapes(pose, base));
+
     return this.scaleShapes(shapes, this.anchor(pose), this.proportions.size);
   }
 
@@ -412,6 +422,138 @@ export class GeometricFigure {
     return this.eyes.shapes(base * this.proportions.headSize);
   }
 
+  /**
+   * One random prop per body, built from the same vocabulary as the figure:
+   * circles, ovals and rounded rectangles, in the accent half of the palette.
+   */
+  accessoryShapes(pose, base) {
+    switch (this.proportions.accessory) {
+      case "hat":
+        return this.hatShapes(pose, base);
+      case "necklace":
+        return this.necklaceShapes(pose, base);
+      case "flower":
+        return this.flowerShapes(pose, base);
+      default:
+        return [];
+    }
+  }
+
+  /** Local frame of the head: centre, eye-axis direction and head "up". */
+  headFrame(pose) {
+    const center = pose.headCenter();
+    if (!center) return null;
+
+    const angle = this.eyes.angle;
+    const axis = { x: Math.cos(angle), y: Math.sin(angle) };
+    // The eye axis is a line, not a vector: MoveNet can return left_eye to the
+    // right of right_eye, which flips the sign. Pick the perpendicular that
+    // points to the top of the image so hats and flowers never hang below the
+    // head.
+    let up = { x: -axis.y, y: axis.x };
+    if (up.y > 0) up = { x: -up.x, y: -up.y };
+
+    return { center, angle, axis, up };
+  }
+
+  /** A flower on one upper corner of the head. */
+  flowerShapes(pose, base) {
+    const frame = this.headFrame(pose);
+    if (!frame) return [];
+
+    const radius = base * this.proportions.headSize;
+    const center = offsetPoint(
+      frame.center,
+      frame.axis,
+      frame.up,
+      radius * 0.55,
+      radius * 0.55
+    );
+    const petals = 5;
+    const shapes = [];
+
+    for (let i = 0; i < petals; i += 1) {
+      const angle = (i / petals) * Math.PI * 2;
+      shapes.push(
+        circleAt(
+          {
+            x: center.x + Math.cos(angle) * radius * 0.22,
+            y: center.y + Math.sin(angle) * radius * 0.22,
+          },
+          radius * 0.16,
+          true
+        )
+      );
+    }
+
+    shapes.push(circleAt(center, radius * 0.11, false, CONFIG.figure.eyeColor));
+    return shapes;
+  }
+
+  /** A crown and a brim, rounded rectangles sitting on top of the head. */
+  hatShapes(pose, base) {
+    const frame = this.headFrame(pose);
+    if (!frame) return [];
+
+    const radius = base * this.proportions.headSize;
+    const brimCenter = offsetPoint(
+      frame.center,
+      frame.axis,
+      frame.up,
+      0,
+      radius * 0.8
+    );
+    const crownCenter = offsetPoint(
+      frame.center,
+      frame.axis,
+      frame.up,
+      0,
+      radius * 1.1
+    );
+
+    const brim = rectangleBetween(
+      offsetPoint(brimCenter, frame.axis, frame.up, -radius * 0.95, 0),
+      offsetPoint(brimCenter, frame.axis, frame.up, radius * 0.95, 0),
+      radius * 0.16
+    );
+    const crown = rectangleBetween(
+      offsetPoint(crownCenter, frame.axis, frame.up, -radius * 0.52, 0),
+      offsetPoint(crownCenter, frame.axis, frame.up, radius * 0.52, 0),
+      radius * 0.55
+    );
+
+    return [crown, brim]
+      .filter(Boolean)
+      .map((shape) => ({ ...shape, accent: true }));
+  }
+
+  /** An oval band over the chest with a small pendant. */
+  necklaceShapes(pose, base) {
+    const left = this.visiblePoint(pose, "left_shoulder");
+    const right = this.visiblePoint(pose, "right_shoulder");
+    if (!left || !right) return [];
+
+    const chest = midpoint(left, right);
+    const angle = Math.atan2(right.y - left.y, right.x - left.x);
+    // The shoulder line is a line too: force "down" towards the bottom of the
+    // image so the band and pendant sit over the chest, never on the neck.
+    let down = { x: -Math.sin(angle), y: Math.cos(angle) };
+    if (down.y < 0) down = { x: -down.x, y: -down.y };
+    const bandCenter = {
+      x: chest.x + down.x * base * 0.09,
+      y: chest.y + down.y * base * 0.09,
+    };
+    const pendantCenter = {
+      x: chest.x + down.x * base * 0.2,
+      y: chest.y + down.y * base * 0.2,
+    };
+
+    return [
+      ellipseAt(bandCenter, base * 0.27, base * 0.055, angle, true),
+      circleAt(pendantCenter, base * 0.045, true, CONFIG.figure.eyeColor),
+    ];
+  }
+
   visiblePoint(pose, name) {
     return pose.isVisible(name) ? pose.get(name) : null;
   }
@@ -455,8 +597,26 @@ function cornerRadius(length, thickness) {
   return Math.min(length, thickness) * CONFIG.figure.cornerRatio;
 }
 
-function circleAt(center, radius) {
-  return { kind: "circle", x: center.x, y: center.y, radius };
+function circleAt(center, radius, accent = false, fill = null) {
+  return {
+    kind: "circle",
+    x: center.x,
+    y: center.y,
+    radius,
+    accent,
+    ...(fill ? { fill } : {}),
+  };
+}
+
+function ellipseAt(center, rx, ry, angle, accent = false) {
+  return { kind: "ellipse", x: center.x, y: center.y, rx, ry, angle, accent };
+}
+
+function offsetPoint(origin, axis, up, along, rise) {
+  return {
+    x: origin.x + axis.x * along + up.x * rise,
+    y: origin.y + axis.y * along + up.y * rise,
+  };
 }
 
 function eyeAt(center, rx, ry, angle, fill) {

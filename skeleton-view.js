@@ -226,9 +226,11 @@ export class SkeletonView {
       return;
     }
 
-    p.stroke(this.withAlpha(p, colors.joint, alpha));
+    const fill = shape.accent ? colors.joint : colors.bone;
+    const stroke = shape.accent ? colors.bone : colors.joint;
+    p.stroke(this.withAlpha(p, stroke, alpha));
     p.strokeWeight(CONFIG.figure.strokeWeight);
-    p.fill(this.withAlpha(p, colors.bone, alpha));
+    p.fill(this.withAlpha(p, fill, alpha));
   }
 
   /** Rotated shapes need the mirror-aware angle. */

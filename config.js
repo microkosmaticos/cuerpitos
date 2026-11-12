@@ -115,6 +115,9 @@ export const CONFIG = {
       closedHeight: 0.08,
     },
 
+    // One accessory is rolled at birth, one per figure.
+    accessories: ["flower", "hat", "necklace"],
+
     // Rolled once per participant when it is locked, kept for the session.
     // A new participant is a new body.
     proportions: {
