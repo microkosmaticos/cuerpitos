@@ -45,15 +45,26 @@ export class SeededRandom {
  * - size: whole-body scale around the chest (small .. large character).
  * - accessory: one random prop, rolled at birth ("flower", "hat" or
  *   "necklace"), kept for the whole session.
+ * - palette: random body (bone) and accent (joint) colours with guaranteed
+ *   contrast for the eyes and the accessories.
  */
 export class FigureProportions {
-  constructor({ seed, girth, armLength, headSize, size = 1, accessory = null }) {
+  constructor({
+    seed,
+    girth,
+    armLength,
+    headSize,
+    size = 1,
+    accessory = null,
+    palette = DEFAULT_PALETTE,
+  }) {
     this.seed = seed >>> 0;
     this.girth = girth;
     this.armLength = armLength;
     this.headSize = headSize;
     this.size = size;
     this.accessory = accessory;
+    this.palette = palette;
   }
 
   static create(seed, ranges = CONFIG.figure.proportions) {
@@ -70,6 +81,7 @@ export class FigureProportions {
         accessories.length > 0
           ? accessories[Math.floor(random.next() * accessories.length)]
           : null,
+      palette: createPalette(random),
     });
   }
 
@@ -82,6 +94,116 @@ export class FigureProportions {
 }
 
 const EYE_SIDES = ["left", "right"];
+
+/** Fallback palette for figures built without a rolled palette. */
+const DEFAULT_PALETTE = Object.freeze({ bone: "#5ef2ff", joint: "#c6fbff" });
+
+/**
+ * One random palette per body.
+ *
+ * The body colour is lifted until it clears `minBodyLuminance`, so the black
+ * eyes always read. The accent colour uses a distant hue and is lifted until
+ * it is clearly brighter than the body, so hats, flowers, necklaces and the
+ * body outline pop.
+ */
+function createPalette(random) {
+  const ranges = CONFIG.figure.palette;
+  const hue = random.float(0, 360);
+  const spread = random.float(ranges.hueSpread[0], ranges.hueSpread[1]);
+  const saturation = random.float(ranges.saturation[0], ranges.saturation[1]);
+  const bodyLightness = random.float(
+    ranges.bodyLightness[0],
+    ranges.bodyLightness[1]
+  );
+  const accentLightness = random.float(
+    ranges.accentLightness[0],
+    ranges.accentLightness[1]
+  );
+
+  const bone = liftLuminance(
+    hue,
+    saturation,
+    bodyLightness,
+    ranges.minBodyLuminance,
+    0.85
+  );
+  const joint = liftLuminance(
+    (hue + spread) % 360,
+    saturation,
+    accentLightness,
+    relativeLuminance(bone.hex) + ranges.minAccentLuminanceGap,
+    0.97
+  );
+
+  // A very bright body (yellow, lime) leaves no room for an even brighter
+  // accent: darken the body just enough to restore the gap.
+  let bodyHex = bone.hex;
+  let bodyLevel = bone.lightness;
+
+  while (
+    relativeLuminance(joint.hex) - relativeLuminance(bodyHex) <
+      ranges.minAccentLuminanceGap &&
+    bodyLevel > 0.2
+  ) {
+    bodyLevel -= 0.02;
+    const candidate = hslToHex(hue, saturation, bodyLevel);
+    if (relativeLuminance(candidate) < ranges.minBodyLuminance) break;
+    bodyHex = candidate;
+  }
+
+  return { bone: bodyHex, joint: joint.hex };
+}
+
+/** HSL (0-360, 0-1, 0-1) to #rrggbb. */
+function hslToHex(hue, saturation, lightness) {
+  const h = ((hue % 360) + 360) % 360;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = lightness - chroma / 2;
+
+  let rgb;
+  if (h < 60) rgb = [chroma, x, 0];
+  else if (h < 120) rgb = [x, chroma, 0];
+  else if (h < 180) rgb = [0, chroma, x];
+  else if (h < 240) rgb = [0, x, chroma];
+  else if (h < 300) rgb = [x, 0, chroma];
+  else rgb = [chroma, 0, x];
+
+  const hex = rgb
+    .map((value) =>
+      Math.round((value + m) * 255)
+        .toString(16)
+        .padStart(2, "0")
+    )
+    .join("");
+
+  return `#${hex}`;
+}
+
+/** WCAG relative luminance of a #rrggbb colour. */
+export function relativeLuminance(hex) {
+  const channels = [1, 3, 5].map((start) => {
+    const value = parseInt(hex.slice(start, start + 2), 16) / 255;
+    return value <= 0.03928
+      ? value / 12.92
+      : ((value + 0.055) / 1.055) ** 2.4;
+  });
+
+  return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+}
+
+/** Raises the HSL lightness until the colour clears `minLuminance`. */
+function liftLuminance(hue, saturation, lightness, minLuminance, maxLightness) {
+  let current = lightness;
+  let hex = hslToHex(hue, saturation, current);
+
+  while (relativeLuminance(hex) < minLuminance && current < maxLightness) {
+    current = Math.min(maxLightness, current + 0.02);
+    hex = hslToHex(hue, saturation, current);
+  }
+
+  return { hex, lightness: current };
+}
 
 /**
  * Eye positions plus an autonomous blink.

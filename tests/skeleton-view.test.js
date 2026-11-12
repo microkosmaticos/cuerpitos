@@ -27,12 +27,13 @@ function createPainter() {
     rectangles: [],
     ellipses: [],
     rotations: [],
+    colorCalls: [],
     background() {},
     clear() {},
-    background() {},
     createCanvas() {},
     resizeCanvas() {},
     color(hex) {
+      this.colorCalls.push(hex);
       return { hex, setAlpha() {} };
     },
     stroke() {},
@@ -244,6 +245,15 @@ test("showSkeleton draws the debug skeleton under the figure", () => {
 
   assert.equal(painter.rectangles.length, 5);
   assert.ok(labelValues().includes("shoulder.L"));
+});
+
+test("the figure uses its own random palette", () => {
+  const palette = { bone: "#112233", joint: "#445566" };
+  render(makePose(), { figure: makeFigure({ palette }) });
+
+  assert.ok(painter.colorCalls.includes(palette.bone), "body colour used");
+  assert.ok(painter.colorCalls.includes(palette.joint), "accent colour used");
+  assert.ok(painter.colorCalls.includes(CONFIG.figure.eyeColor), "eyes stay black");
 });
 
 test("mirroring reverses the rotation of rectangles and eyes, and only then", () => {

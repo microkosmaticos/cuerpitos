@@ -158,7 +158,9 @@ export class SkeletonView {
       if (participant.state === "ABSENT") continue;
 
       const palette = CONFIG.skeleton.palette;
-      const colors = palette[participant.slotId % palette.length];
+      const colors =
+        participant.figure?.proportions?.palette ??
+        palette[participant.slotId % palette.length];
       const alpha = participant.state === "LOST" ? 0.4 : 1;
 
       // The skeleton is a debug layer: it sits under the geometric body.

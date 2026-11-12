@@ -115,6 +115,20 @@ export const CONFIG = {
       closedHeight: 0.08,
     },
 
+    // Random palette per figure, rolled at birth. Ranges are chosen so the
+    // black eyes and the accent accessories always keep contrast.
+    palette: {
+      saturation: [0.62, 0.95],
+      bodyLightness: [0.62, 0.75],
+      accentLightness: [0.8, 0.94],
+      // Hue separation between body and accent, in degrees.
+      hueSpread: [120, 240],
+      // Minimum relative luminance of the body: keeps the black eyes readable.
+      minBodyLuminance: 0.18,
+      // Minimum luminance gap between the accent and the body.
+      minAccentLuminanceGap: 0.1,
+    },
+
     // One accessory is rolled at birth, one per figure.
     accessories: ["flower", "hat", "necklace"],
 

@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { CONFIG } from "../config.js";
-import { FigureProportions, GeometricFigure, SeededRandom } from "../figure.js";
+import {
+  FigureProportions,
+  GeometricFigure,
+  SeededRandom,
+  relativeLuminance,
+} from "../figure.js";
 import { Pose } from "../pose.js";
 
 const UPPER_BODY = {
@@ -122,12 +127,53 @@ test("proportions stay inside the configured ranges", () => {
 
 test("one seed is one body, and different seeds are different bodies", () => {
   const body = (seed) => {
-    const { girth, armLength, headSize, size } = FigureProportions.create(seed);
-    return { girth, armLength, headSize, size };
+    const { girth, armLength, headSize, size, accessory, palette } =
+      FigureProportions.create(seed);
+    return { girth, armLength, headSize, size, accessory, palette };
   };
 
   assert.deepEqual(body(7), body(7));
   assert.notDeepEqual(body(7), body(8));
+});
+
+test("every body rolls a readable random palette", () => {
+  const seen = new Set();
+
+  for (let seed = 1; seed <= 80; seed += 1) {
+    const { palette } = FigureProportions.create(seed);
+
+    assert.match(palette.bone, /^#[0-9a-f]{6}$/);
+    assert.match(palette.joint, /^#[0-9a-f]{6}$/);
+
+    const body = relativeLuminance(palette.bone);
+    const accent = relativeLuminance(palette.joint);
+
+    // The black eyes need contrast against the body.
+    assert.ok(
+      (body + 0.05) / 0.05 >= 4.5,
+      `body ${palette.bone} is too dark for the eyes`
+    );
+    // The accent accessories must stand out from the body.
+    assert.ok(
+      accent - body >= 0.09,
+      `accent ${palette.joint} does not pop from ${palette.bone}`
+    );
+
+    seen.add(palette.bone);
+  }
+
+  assert.ok(seen.size > 60, "palettes are random");
+});
+
+test("the palette is stable for a body", () => {
+  assert.deepEqual(
+    FigureProportions.create(11).palette,
+    FigureProportions.create(11).palette
+  );
+  assert.notDeepEqual(
+    FigureProportions.create(11).palette,
+    FigureProportions.create(12).palette
+  );
 });
 
 test("a neutral body follows the detected joints", () => {
