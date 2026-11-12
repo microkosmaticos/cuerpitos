@@ -66,6 +66,8 @@ export class ExperienciaController {
     this.detecciones = 0;
     this.mejorConfianza = 0;
     this.candidatos = 0;
+    this.energia = 0;
+    this.anclas = 0;
 
     this.ultimoIngest = 0;
     this._frames = 0;
@@ -152,6 +154,13 @@ export class ExperienciaController {
     const resultado = this.manager.update(dt, this.frame);
 
     this.candidatos = this.tracker?.candidates?.length ?? 0;
+
+    const personas = this.frame?.persons ?? [];
+    this.energia = personas.reduce((maximo, persona) => Math.max(maximo, persona.energy ?? 0), 0);
+    this.anclas = personas.reduce(
+      (maximo, persona) => Math.max(maximo, (persona.anchors ?? []).filter(Boolean).length),
+      0
+    );
 
     this.registrarEventos(resultado.eventos);
     this.actualizarPoses(resultado.organismos, dt);
@@ -247,6 +256,8 @@ export class ExperienciaController {
         detecciones: this.detecciones,
         mejorConfianza: this.mejorConfianza,
         candidatos: this.candidatos,
+        energia: this.energia,
+        anclas: this.anclas,
       },
     });
   }

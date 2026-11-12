@@ -76,6 +76,10 @@ export class ExperienciaView {
     this.tiempo += (p.deltaTime || 0) / 1000;
 
     const rect = this.rectDeCamara(camara);
+    this.ultimoVideo =
+      camara?.ready && camara.video && Number.isFinite(camara.video.currentTime)
+        ? camara.video.currentTime
+        : null;
 
     // Proyección de coordenadas normalizadas del video al canvas.
     this.proyectar = (punto) => ({
@@ -361,7 +365,7 @@ export class ExperienciaView {
     const minimo = CICLO.presencia.confianzaMinima;
 
     // Panel tenue detrás del texto: el fondo artístico es luminoso.
-    const altoPanel = 26 + (items.length === 0 ? 40 : 40 + items.length * 38);
+    const altoPanel = 26 + (items.length === 0 ? 56 : 56 + items.length * 38);
     p.noStroke();
     p.fill(8, 6, 20, 105);
     p.rect(12, 8, 430, altoPanel, 10);
@@ -377,15 +381,25 @@ export class ExperienciaView {
       16
     );
 
+    const video = this.ultimoVideo;
+    p.fill(255, 255, 255, 120);
+    p.textSize(11);
+    p.text(
+      `anclas ${diagnostico.anclas ?? 0}/7 · energía ${(diagnostico.energia ?? 0).toFixed(2)}` +
+        (video === null ? "" : ` · video ${video.toFixed(1)} s`),
+      24,
+      34
+    );
+
     if (items.length === 0 && !mensaje) {
       p.fill(255, 255, 255, 190);
       p.textSize(13);
-      p.text(this.explicacionDeEspera(diagnostico, minimo), 24, 40);
+      p.text(this.explicacionDeEspera(diagnostico, minimo), 24, 54);
     }
 
     // Un renglón por organismo.
     items.forEach((item, indice) => {
-      const y = 62 + indice * 38;
+      const y = 74 + indice * 38;
 
       p.fill(255, 255, 255, 235);
       p.textSize(13);
@@ -411,8 +425,8 @@ export class ExperienciaView {
     // ocupa el centro de la pantalla.
     if (mensaje && !error) {
       p.fill(255, 226, 160, 220);
-      p.textSize(12);
-      p.text(mensaje, 24, 34);
+      p.textSize(11);
+      p.text(mensaje, 24, 50);
     }
 
     if (mensaje && error) {

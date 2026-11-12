@@ -30,8 +30,11 @@ export const CICLO = congelarProfundo({
 
   // Umbrales de "persona válida".
   presencia: congelarProfundo({
-    confianzaMinima: 0.6,
-    confianzaHombro: 0.5,
+    // MoveNet devuelve confianzas más bajas que las que suponía el
+    // prototipo: un torso de frente promedia 0.45-0.65. Con 0.6 muchos
+    // cuerpos válidos nunca llegaban a nacer.
+    confianzaMinima: 0.45,
+    confianzaHombro: 0.35,
     margenX: { min: 0.15, max: 0.85 },
     margenY: { min: 0.1, max: 0.9 },
     // Separación mínima entre hombros (normalizada).

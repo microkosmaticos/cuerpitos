@@ -157,7 +157,12 @@ export class ParticipantTracker {
     const iou = intersectionOverUnion(predictedBox, pose.box);
 
     const { maxCenterDistanceNorm, maxScaleRatio } = this.config.matching;
-    if (normDistance > maxCenterDistanceNorm) return null;
+
+    // Con inferencia lenta (CPU) pasa más de un segundo entre poses y la
+    // persona se movió: la compuerta de distancia se ensancha con el hueco.
+    const holgura = 1 + Math.min(1.5, Math.max(0, dt - 0.4) / 0.8);
+
+    if (normDistance > maxCenterDistanceNorm * holgura) return null;
     if (scaleRatio > maxScaleRatio) return null;
 
     return (

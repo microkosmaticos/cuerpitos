@@ -31,6 +31,20 @@ ajustes son los mismos. La página `fondo.html` sigue usando el sketch original.
 La cámara **no se muestra**: se enciende solo para detectar personas. El fondo nunca
 queda negro, porque la primera capa del fondo ya cubre toda la pantalla.
 
+### Si no aparece o no se mueve nada
+
+El HUD muestra, sin tocar nada:
+
+```
+LOCKED · 2/2 personas · 24 fps · 2 detecciones
+anclas 7/7 · energía 0.62 · video 41.3 s
+```
+
+- `detecciones 0` → el modelo no ve personas: encuadre, luz o modelo cargando.
+- `anclas 0/7` → la persona está pero los puntos no son confiables.
+- `energía 0.00` con anclas → la persona está quieta (el organismo también).
+- `video` debe avanzar: si queda clavado, el video de la cámara se detuvo.
+
 ### Primer encuentro
 
 Cuando se confirman las **dos personas** y nacen los dos avatares, la primera

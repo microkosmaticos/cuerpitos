@@ -39,7 +39,14 @@ export const LIMITES = congelarProfundo({
 });
 
 /** Debajo de esta energía todo se asienta en reposo. */
-export const ZONA_MUERTA = 0.05;
+export const ZONA_MUERTA = 0.02;
+
+/**
+ * Con cualquier gesto, la respuesta arranca en este piso. Sin él, los
+ * movimientos suaves quedaban casi invisibles aunque la persona se
+ * estuviera moviendo.
+ */
+const PISO_DE_RESPUESTA = 0.4;
 
 /** Constantes de tiempo, en segundos. */
 const DECAIMIENTO_DE_SENAL = 0.8;
@@ -133,7 +140,10 @@ export class OrganismPose {
       this.senal *= Math.exp(-paso / DECAIMIENTO_DE_SENAL);
     }
 
-    const intensidad = haySenal ? intensidadDeEnergia(persona.energy) * this.senal : 0;
+    const energia = haySenal ? intensidadDeEnergia(persona.energy) : 0;
+    const intensidad = energia > 0
+      ? (PISO_DE_RESPUESTA + (1 - PISO_DE_RESPUESTA) * energia) * this.senal
+      : 0;
 
     // Posición del organismo: sigue al centro, atenuado y suavizado.
     const objetivoX = persona ? (persona.center.x - 0.5) * 2 * LIMITES.desplazamiento * this.senal : 0;

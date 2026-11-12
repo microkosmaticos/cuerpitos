@@ -40,10 +40,10 @@ const NOMBRES_DE_ANCLAS = [
  * segundo. Un gesto amplio (0,3 del encuadre en medio segundo) llega
  * al máximo; el temblor del detector queda por debajo de la zona muerta.
  */
-const ENERGIA_MAXIMA = 0.3;
+const ENERGIA_MAXIMA = 0.18;
 
 /** Debajo de este movimiento no hay energía (ruido del detector). */
-const ZONA_MUERTA = 0.03;
+const ZONA_MUERTA = 0.012;
 
 /** Suavizado de la energía, en segundos: la señal no salta de golpe. */
 const SUAVIZADO = 0.18;

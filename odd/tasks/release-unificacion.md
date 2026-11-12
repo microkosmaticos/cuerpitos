@@ -202,3 +202,27 @@ Pedido: "después que se confirmen las dos personas, se ejecute la reacción inm
   cuadro en que nace el segundo avatar (cuadro 54) y el abrazo llega a 60 % sin errores.
 - `npm test`: 107 tests + 10 suites en verde (53 comprobaciones de comportamientos, con tres
   nuevas del encuentro).
+
+### Ronda 7 — umbrales reales de MoveNet (12/11)
+
+Pedido: "no se ejecuta ningún movimiento".
+
+Se probó el camino REAL con ml5 sobre un video con personas (servidor con Range). Hallazgos
+medidos:
+- ml5 `bodyPose` devuelve `keypoints` con `confidence` y propiedades nombradas con
+  `{x, y, confidence}`, pero **sin `score` a nivel de pose**: la confianza útil es el
+  promedio del tren superior.
+- Un torso real de frente promedia **0.41–0.47** de confianza. El umbral de nacimiento era
+  **0.6** (y 0.5 por hombro): cuerpos válidos nunca llegaban a nacer.
+- El adaptador exigía 0.18 unidades/s de velocidad para considerar movimiento, y la pose
+  aplicaba otro piso: los gestos suaves quedaban invisibles.
+
+Cambios:
+- `CICLO.presencia`: confianza mínima 0.6 → 0.45; hombros 0.5 → 0.35.
+- `TrackingAdapter`: zona muerta 0.03 → 0.012 y energía máxima 0.3 → 0.18.
+- `OrganismPose`: zona muerta 0.05 → 0.02 y piso de respuesta 0.4 cuando hay gesto.
+- `participants.js`: la compuerta de distancia del emparejamiento se ensancha con el hueco
+  entre poses (inferencia lenta en CPU).
+- HUD: muestra `anclas n/7 · energía e · video t s` para saber dónde se detiene la cadena.
+
+`npm test` en verde (107 tests + 10 suites).
