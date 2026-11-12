@@ -12,6 +12,7 @@ La instalación utiliza una cámara web para detectar hasta dos personas. A part
 - La proyección visual será en espejo: el movimiento se refleja horizontalmente en pantalla, de modo que la mano derecha de la persona aparece a la derecha de quien mira, como frente a un espejo. Los datos de pose se mantienen en coordenadas reales; el espejo se aplica únicamente al dibujar.
 - No se reconocerán rostros ni se dibujarán caras.
 - Durante el desarrollo del módulo de tracking, la cámara no se muestra: solo se visualiza un esqueleto de seguimiento del tren superior (puntos, líneas, cuello y círculo de cabeza). Puede incluir puntos de ojos, nariz y orejas como referencia de posición; no es un rostro dibujado ni la estética final de los organismos.
+- Sobre cada articulación se escribe su nombre de rig (`shoulder.L`, `elbow.R`, `wrist.L`, `chest`, `pelvis`, `head`, …) con la convención de Blender/Rigify (`.L` / `.R`), para construir y verificar el armature que después moverá a los organismos. La tabla de nombres y la jerarquía de huesos viven en `rig.js` y se validan con `npm test`.
 - Si una persona se retira, su organismo desaparecerá mediante una transición.
 - Si vuelve a entrar, nacerá un organismo nuevo, con otra identidad generativa.
 
@@ -25,6 +26,16 @@ La detección y la selección son capas separadas. MoveNet puede ver más de dos
 - **Ausencia prolongada**: superada la tolerancia, el slot queda `ABSENT` y reservado. No se asigna a otra persona.
 - **Liberación**: la sesión se libera solo cuando ambos participantes estuvieron ausentes ~6 s. Recién entonces se puede seleccionar una pareja nueva.
 - La lógica vive en `participants.js`, sin p5 ni ml5, y se prueba con `npm test`.
+
+### 2.2 Figura geométrica generativa
+
+- Al bloquearse un participante se genera su figura: un cuerpo geométrico que reemplaza en pantalla al esqueleto de seguimiento.
+- Las proporciones se sortean una sola vez por participante y se conservan durante toda su sesión, también en `LOST`. Un participante nuevo es un cuerpo nuevo.
+- `girth` varía el ancho del tronco, los brazos y los hombros (personajes gordos y flacos); `armLength` varía la longitud de los dos segmentos de cada brazo; `headSize` varía el radio de la cabeza; `size` escala el cuerpo entero alrededor del chest para que convivan personajes pequeños y grandes. Los rangos viven en `CONFIG.figure.proportions`.
+- La figura sigue las articulaciones detectadas (hombro, codo, muñeca, cadera y centro de cabeza) y estira cada segmento de brazo según `armLength`, respetando la dirección del movimiento y manteniendo la cadena hombro→codo→muñeca conectada.
+- Formas: un rectángulo entre hombro y codo, otro entre codo y muñeca, un rectángulo de tronco (chest), un círculo en cada hombro y un círculo en la cabeza. Sin caderas visibles, el tronco cuelga debajo de la línea de hombros.
+- El esqueleto de seguimiento queda disponible como capa de depuración con `CONFIG.figure.showSkeleton`.
+- La geometría vive en `figure.js`, sin p5, y se prueba con `npm test`; `skeleton-view.js` solo la dibuja.
 
 ## 3. Apariencia de los organismos
 - Serán abstractos, orgánicos y generativos.

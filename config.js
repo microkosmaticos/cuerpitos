@@ -50,6 +50,12 @@ export const CONFIG = {
       neckWeight: 3,
     },
 
+    // Rig build aid: write each joint's rig name next to the point, using the
+    // armature naming from rig.js. Turn off for the installation look.
+    showJointNames: true,
+    jointLabelSize: 11,
+    jointLabelOffset: 10,
+
     // MoveNet keypoint names that make up head, torso and upper limbs.
     // Knee and ankle connections are automatically excluded.
     upperBody: [
@@ -77,6 +83,38 @@ export const CONFIG = {
       { bone: "#ffd166", joint: "#fff0c2" },
       { bone: "#c39bff", joint: "#eadcff" },
     ],
+  },
+
+  figure: {
+    // Geometric body that replaces the tracking skeleton on screen.
+    enabled: true,
+    // Draw the tracking skeleton under the figure. Debug only.
+    showSkeleton: false,
+    strokeWeight: 2,
+
+    // Rolled once per participant when it is locked, kept for the session.
+    // A new participant is a new body.
+    proportions: {
+      // Width multiplier: 0.55 is thin, 1.9 is wide.
+      girth: [0.55, 1.9],
+      // Shoulder->elbow and elbow->wrist length multiplier.
+      armLength: [0.8, 1.35],
+      // Head radius as a fraction of the detected shoulder width.
+      headSize: [0.16, 0.42],
+      // Whole-body scale, applied around the chest. 0.6 is a small character,
+      // 1.5 is a large one.
+      size: [0.6, 1.5],
+    },
+
+    // Ratios of the detected shoulder width.
+    ratios: {
+      chestThickness: 1.0,
+      // Chest length when the hips are not visible (waist-up framing).
+      chestLength: 0.9,
+      shoulderRadius: 0.13,
+      upperArmThickness: 0.17,
+      forearmThickness: 0.14,
+    },
   },
 
   participants: {

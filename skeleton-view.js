@@ -1,4 +1,5 @@
 import { CONFIG } from "./config.js";
+import { RIG_HEAD_MARKERS, rigNameFor } from "./rig.js";
 
 /**
  * Skeleton renderer.
@@ -22,6 +23,7 @@ export class SkeletonView {
     this.videoWidth = 0;
     this.videoHeight = 0;
     this.upperBody = new Set(CONFIG.skeleton.upperBody);
+    this.headMarkers = new Set(RIG_HEAD_MARKERS);
     this.p = null;
 
     new p5((p) => this.createSketch(p), container);
@@ -135,7 +137,53 @@ export class SkeletonView {
       const colors = palette[participant.slotId % palette.length];
       const alpha = participant.state === "LOST" ? 0.4 : 1;
 
-      this.drawPose(p, participant.pose, transform, colors, alpha, true);
+      // The skeleton is a debug layer: it sits under the geometric body.
+      if (CONFIG.figure.showSkeleton || !CONFIG.figure.enabled) {
+        this.drawPose(p, participant.pose, transform, colors, alpha, true);
+      }
+
+      if (CONFIG.figure.enabled && participant.figure) {
+        this.drawFigure(
+          p,
+          participant.figure,
+          participant.pose,
+          transform,
+          colors,
+          alpha
+        );
+      }
+    }
+  }
+
+  /**
+   * Geometric body. Shapes arrive in video coordinates, so the same mirror and
+   * cover transform used by the skeleton applies here.
+   */
+  drawFigure(p, figure, pose, transform, colors, alpha) {
+    const shapes = figure.shapes(pose);
+    const scale = transform.scale;
+
+    p.stroke(this.withAlpha(p, colors.joint, alpha));
+    p.strokeWeight(CONFIG.figure.strokeWeight);
+    p.fill(this.withAlpha(p, colors.bone, alpha));
+
+    for (const shape of shapes) {
+      const center = this.project(shape, transform);
+
+      if (shape.kind === "circle") {
+        p.circle(center.x, center.y, shape.radius * 2 * scale);
+        continue;
+      }
+
+      if (shape.kind !== "rectangle") continue;
+
+      p.push();
+      p.translate(center.x, center.y);
+      // Mirroring flips x, which reverses the rotation direction.
+      p.rotate(CONFIG.skeleton.mirror ? -shape.angle : shape.angle);
+      p.rectMode(p.CENTER);
+      p.rect(0, 0, shape.length * scale, shape.thickness * scale);
+      p.pop();
     }
   }
 
@@ -182,6 +230,67 @@ export class SkeletonView {
       const projected = this.project(point, transform);
       p.circle(projected.x, projected.y, keypointRadius * 2);
     }
+
+    if (CONFIG.skeleton.showJointNames) {
+      this.drawJointNames(p, pose, transform, colors, alpha);
+    }
+  }
+
+  /**
+   * Writes the rig name of every visible joint. Head markers are skipped:
+   * they build the head, they do not articulate. `chest`, `pelvis` and `head`
+   * are synthetic joints, so they are labelled from their own geometry.
+   */
+  drawJointNames(p, pose, transform, colors, alpha) {
+    const { minConfidence } = CONFIG.skeleton;
+
+    p.textFont("monospace");
+    p.textSize(CONFIG.skeleton.jointLabelSize);
+    p.fill(this.withAlpha(p, colors.joint, alpha));
+
+    for (const name of CONFIG.skeleton.upperBody) {
+      if (this.headMarkers.has(name)) continue;
+
+      const point = pose.get(name);
+      if (!point) continue;
+      if ((point.confidence ?? 0) < minConfidence) continue;
+
+      this.drawJointName(p, rigNameFor(name), this.project(point, transform));
+    }
+
+    const leftShoulder = this.visiblePoint(pose, "left_shoulder");
+    const rightShoulder = this.visiblePoint(pose, "right_shoulder");
+    if (leftShoulder && rightShoulder) {
+      const chest = this.midpoint(leftShoulder, rightShoulder);
+      this.drawJointName(p, "chest", this.project(chest, transform));
+    }
+
+    const leftHip = this.visiblePoint(pose, "left_hip");
+    const rightHip = this.visiblePoint(pose, "right_hip");
+    if (leftHip && rightHip) {
+      const pelvis = this.midpoint(leftHip, rightHip);
+      this.drawJointName(p, "pelvis", this.project(pelvis, transform));
+    }
+
+    const head = pose.headCenter();
+    if (head) {
+      this.drawJointName(p, "head", this.project(head, transform));
+    }
+  }
+
+  /** Labels flip toward the canvas centre so they never leave the frame. */
+  drawJointName(p, name, projected) {
+    if (!name) return;
+
+    const offset = CONFIG.skeleton.jointLabelOffset;
+    const alignRight = projected.x + offset + p.textWidth(name) > p.width;
+
+    p.textAlign(alignRight ? p.RIGHT : p.LEFT, p.BOTTOM);
+    p.text(
+      name,
+      projected.x + (alignRight ? -offset : offset),
+      projected.y - offset
+    );
   }
 
   /**
@@ -196,13 +305,10 @@ export class SkeletonView {
     const rightEar = this.visiblePoint(pose, "right_ear");
     const leftEye = this.visiblePoint(pose, "left_eye");
     const rightEye = this.visiblePoint(pose, "right_eye");
-    const nose = this.visiblePoint(pose, "nose");
     const leftShoulder = this.visiblePoint(pose, "left_shoulder");
     const rightShoulder = this.visiblePoint(pose, "right_shoulder");
 
-    const ears = leftEar && rightEar ? this.midpoint(leftEar, rightEar) : null;
-    const eyes = leftEye && rightEye ? this.midpoint(leftEye, rightEye) : null;
-    const center = ears ?? eyes ?? nose;
+    const center = pose.headCenter();
     if (!center) return;
 
     const shoulderCenter =

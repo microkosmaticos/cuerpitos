@@ -56,6 +56,30 @@ export class Pose {
   }
 
   /**
+   * Head anchor: midpoint of the ears, then of the eyes, then the nose.
+   * Shared by the head circle and the geometric figure, so they never diverge.
+   * Returns null when no head reference is visible.
+   */
+  headCenter() {
+    const midpointOf = (a, b) => {
+      if (!this.isVisible(a) || !this.isVisible(b)) return null;
+      const left = this.get(a);
+      const right = this.get(b);
+      return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
+    };
+
+    const ears = midpointOf("left_ear", "right_ear");
+    if (ears) return ears;
+
+    const eyes = midpointOf("left_eye", "right_eye");
+    if (eyes) return eyes;
+
+    if (!this.isVisible("nose")) return null;
+    const nose = this.get("nose");
+    return { x: nose.x, y: nose.y };
+  }
+
+  /**
    * MoveNet MULTIPOSE does not always expose a top-level or box score, so we
    * fall back to the average keypoint confidence.
    */
