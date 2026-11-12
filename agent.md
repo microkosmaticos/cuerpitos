@@ -33,7 +33,7 @@ La detección y la selección son capas separadas. MoveNet puede ver más de dos
 - Las proporciones se sortean una sola vez por participante y se conservan durante toda su sesión, también en `LOST`. Un participante nuevo es un cuerpo nuevo.
 - `girth` varía el ancho del tronco, los brazos y los hombros (personajes gordos y flacos); `armLength` varía la longitud de los dos segmentos de cada brazo; `headSize` varía el radio de la cabeza; `size` escala el cuerpo entero alrededor del chest para que convivan personajes pequeños y grandes. Los rangos viven en `CONFIG.figure.proportions`.
 - La figura sigue las articulaciones detectadas (hombro, codo, muñeca, cadera y centro de cabeza) y estira cada segmento de brazo según `armLength`, respetando la dirección del movimiento y manteniendo la cadena hombro→codo→muñeca conectada.
-- Formas: un rectángulo entre hombro y codo, otro entre codo y muñeca, un rectángulo de tronco (chest), un círculo en cada hombro y un círculo en la cabeza. Sin caderas visibles, el tronco cuelga debajo de la línea de hombros.
+- Formas: un rectángulo entre hombro y codo, otro entre codo y muñeca, un rectángulo de tronco (chest), un círculo en cada hombro, uno en cada codo y un círculo en la cabeza. El círculo del codo cubre la unión de los dos rectángulos del brazo, ya estirado por `armLength`. Sin caderas visibles, el tronco cuelga debajo de la línea de hombros.
 - El esqueleto de seguimiento queda disponible como capa de depuración con `CONFIG.figure.showSkeleton`.
 - La geometría vive en `figure.js`, sin p5, y se prueba con `npm test`; `skeleton-view.js` solo la dibuja.
 

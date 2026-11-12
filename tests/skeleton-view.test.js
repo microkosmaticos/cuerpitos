@@ -210,8 +210,8 @@ test("figure mode replaces the skeleton with the geometric body", () => {
 
   // Chest plus four arm segments.
   assert.equal(painter.rectangles.length, 5);
-  // Two shoulders plus the head.
-  assert.equal(painter.circles.length, 3);
+  // Two shoulders, two elbows and the head.
+  assert.equal(painter.circles.length, 5);
   assert.deepEqual(labelValues(), []);
 });
 

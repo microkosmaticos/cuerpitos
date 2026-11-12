@@ -62,6 +62,28 @@ function endOf(rectangle, sign) {
   };
 }
 
+/**
+ * Shapes in their documented order: chest, left arm, right arm, then the
+ * joints (left shoulder, right shoulder, left elbow, right elbow) and head.
+ */
+function parts(shapes) {
+  const rectangles = shapes.filter((shape) => shape.kind === "rectangle");
+  const circles = shapes.filter((shape) => shape.kind === "circle");
+
+  return {
+    rectangles,
+    circles,
+    chest: rectangles[0],
+    leftUpper: rectangles[1],
+    leftForearm: rectangles[2],
+    leftShoulder: circles[0],
+    rightShoulder: circles[1],
+    leftElbow: circles[2],
+    rightElbow: circles[3],
+    head: circles[circles.length - 1],
+  };
+}
+
 test("the seeded random is deterministic", () => {
   const a = new SeededRandom(42);
   const b = new SeededRandom(42);
@@ -93,8 +115,8 @@ test("proportions stay inside the configured ranges", () => {
 
 test("one seed is one body, and different seeds are different bodies", () => {
   const body = (seed) => {
-    const { girth, armLength, headSize } = FigureProportions.create(seed);
-    return { girth, armLength, headSize };
+    const { girth, armLength, headSize, size } = FigureProportions.create(seed);
+    return { girth, armLength, headSize, size };
   };
 
   assert.deepEqual(body(7), body(7));
@@ -102,8 +124,16 @@ test("one seed is one body, and different seeds are different bodies", () => {
 });
 
 test("a neutral body follows the detected joints", () => {
-  const [chest, leftUpper, leftForearm, , , leftShoulder, rightShoulder, head] =
-    makeFigure().shapes(makePose());
+  const {
+    chest,
+    leftUpper,
+    leftForearm,
+    leftShoulder,
+    rightShoulder,
+    leftElbow,
+    rightElbow,
+    head,
+  } = parts(makeFigure().shapes(makePose()));
 
   approx(chest.x, 320, "chest x");
   approx(chest.y, 300, "chest y");
@@ -125,25 +155,31 @@ test("a neutral body follows the detected joints", () => {
   approx(leftShoulder.radius, 13, "shoulder radius");
   approx(rightShoulder.x, 370, "right shoulder x");
 
+  approx(leftElbow.x, 240, "left elbow x");
+  approx(leftElbow.y, 280, "left elbow y");
+  approx(leftElbow.radius, 13, "elbow radius");
+  approx(rightElbow.x, 400, "right elbow x");
+
   approx(head.x, 320, "head x");
   approx(head.y, 115, "head y");
   approx(head.radius, 30, "head radius");
 });
 
 test("girth changes thickness without changing limb length or head size", () => {
-  const thin = makeFigure({ girth: 0.6 }).shapes(makePose());
-  const wide = makeFigure({ girth: 1.8 }).shapes(makePose());
+  const thin = parts(makeFigure({ girth: 0.6 }).shapes(makePose()));
+  const wide = parts(makeFigure({ girth: 1.8 }).shapes(makePose()));
 
-  approx(thin[1].length, wide[1].length, "upper arm length");
-  approx(thin[1].thickness, 17 * 0.6, "thin upper arm");
-  approx(wide[1].thickness, 17 * 1.8, "wide upper arm");
-  approx(thin[7].radius, wide[7].radius, "head radius");
+  approx(thin.leftUpper.length, wide.leftUpper.length, "upper arm length");
+  approx(thin.leftUpper.thickness, 17 * 0.6, "thin upper arm");
+  approx(wide.leftUpper.thickness, 17 * 1.8, "wide upper arm");
+  approx(thin.head.radius, wide.head.radius, "head radius");
+  approx(thin.leftElbow.radius, 13 * 0.6, "thin elbow");
+  approx(wide.leftElbow.radius, 13 * 1.8, "wide elbow");
 });
 
 test("arm length stretches both segments and keeps the chain connected", () => {
   const shapes = makeFigure({ armLength: 1.5 }).shapes(makePose());
-  const upper = shapes[1];
-  const forearm = shapes[2];
+  const { leftUpper: upper, leftForearm: forearm } = parts(shapes);
 
   approx(upper.length, Math.hypot(30, 80) * 1.5, "upper length");
   approx(forearm.length, Math.hypot(20, 70) * 1.5, "forearm length");
@@ -158,19 +194,33 @@ test("arm length stretches both segments and keeps the chain connected", () => {
   approx(upperEnd.y, forearmStart.y, "elbow y");
 });
 
-test("head size varies independently of the arms", () => {
-  const small = makeFigure({ headSize: 0.16 }).shapes(makePose());
-  const big = makeFigure({ headSize: 0.42 }).shapes(makePose());
+test("the elbow circle covers the bend of the figure", () => {
+  const shapes = makeFigure({ armLength: 1.4 }).shapes(makePose());
+  const { leftUpper, leftForearm, leftElbow } = parts(shapes);
 
-  approx(small[7].radius, 16, "small head");
-  approx(big[7].radius, 42, "big head");
-  approx(small[1].length, big[1].length, "arm length");
+  const upperEnd = endOf(leftUpper, 1);
+  const forearmStart = endOf(leftForearm, -1);
+
+  approx(leftElbow.x, upperEnd.x, "elbow x");
+  approx(leftElbow.y, upperEnd.y, "elbow y");
+  approx(upperEnd.x, forearmStart.x, "chain x");
+  approx(upperEnd.y, forearmStart.y, "chain y");
+  approx(leftElbow.radius, 13, "elbow radius");
+});
+
+test("head size varies independently of the arms", () => {
+  const small = parts(makeFigure({ headSize: 0.16 }).shapes(makePose()));
+  const big = parts(makeFigure({ headSize: 0.42 }).shapes(makePose()));
+
+  approx(small.head.radius, 16, "small head");
+  approx(big.head.radius, 42, "big head");
+  approx(small.leftUpper.length, big.leftUpper.length, "arm length");
 });
 
 test("size scales the whole body around the chest", () => {
-  const [chest, leftUpper, , , , leftShoulder, , head] = makeFigure({
-    size: 1.5,
-  }).shapes(makePose());
+  const { chest, leftUpper, leftShoulder, leftElbow, head } = parts(
+    makeFigure({ size: 1.5 }).shapes(makePose())
+  );
 
   // The chest is the anchor, so the torso still starts on the shoulder line.
   approx(chest.x, 320, "chest x");
@@ -186,20 +236,28 @@ test("size scales the whole body around the chest", () => {
   approx(leftShoulder.x, 245, "shoulder x");
   approx(leftShoulder.radius, 19.5, "shoulder radius");
 
+  approx(leftElbow.x, 200, "elbow x");
+  approx(leftElbow.y, 320, "elbow y");
+  approx(leftElbow.radius, 19.5, "elbow radius");
+
   approx(head.x, 320, "head x");
   approx(head.y, 72.5, "head y");
   approx(head.radius, 45, "head radius");
 });
 
 test("small and large bodies differ in scale, not in shape", () => {
-  const small = makeFigure({ size: 0.6 }).shapes(makePose());
-  const big = makeFigure({ size: 1.5 }).shapes(makePose());
+  const small = parts(makeFigure({ size: 0.6 }).shapes(makePose()));
+  const big = parts(makeFigure({ size: 1.5 }).shapes(makePose()));
 
-  approx(small[0].x, big[0].x, "chest x");
-  approx(small[0].thickness / big[0].thickness, 0.4, "thickness ratio");
-  approx(small[0].length / big[0].length, 0.4, "torso length ratio");
-  approx(small[7].radius / big[7].radius, 0.4, "head ratio");
-  assert.ok(small[7].y > big[7].y, "the small head sits closer to the chest");
+  approx(small.chest.x, big.chest.x, "chest x");
+  approx(
+    small.chest.thickness / big.chest.thickness,
+    0.4,
+    "thickness ratio"
+  );
+  approx(small.chest.length / big.chest.length, 0.4, "torso length ratio");
+  approx(small.head.radius / big.head.radius, 0.4, "head ratio");
+  assert.ok(small.head.y > big.head.y, "the small head sits closer to the chest");
 });
 
 test("no head reference means no head circle", () => {
@@ -213,7 +271,8 @@ test("no head reference means no head circle", () => {
     })
   );
 
-  assert.equal(shapes.filter((shape) => shape.kind === "circle").length, 2);
+  // Both shoulders and both elbows, no head.
+  assert.equal(shapes.filter((shape) => shape.kind === "circle").length, 4);
 });
 
 test("an arm without an elbow is not drawn", () => {
@@ -223,9 +282,9 @@ test("an arm without an elbow is not drawn", () => {
 });
 
 test("without hips the chest hangs below the shoulder line", () => {
-  const chest = makeFigure().shapes(
-    makePose({ left_hip: null, right_hip: null })
-  )[0];
+  const { chest } = parts(
+    makeFigure().shapes(makePose({ left_hip: null, right_hip: null }))
+  );
 
   approx(chest.x, 320, "chest x");
   approx(chest.y, 245, "chest y");

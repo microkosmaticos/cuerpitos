@@ -112,6 +112,7 @@ export const CONFIG = {
       // Chest length when the hips are not visible (waist-up framing).
       chestLength: 0.9,
       shoulderRadius: 0.13,
+      elbowRadius: 0.13,
       upperArmThickness: 0.17,
       forearmThickness: 0.14,
     },

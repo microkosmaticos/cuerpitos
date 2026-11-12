@@ -79,7 +79,10 @@ export class FigureProportions {
  * Shapes:
  *   rectangle  between shoulder and elbow, and between elbow and wrist.
  *   rectangle  chest/torso, between the shoulder line and the hips.
- *   circle     head, and one per shoulder joint.
+ *   circle     head, plus one per shoulder and per elbow.
+ *
+ * The elbow circle follows the stretched arm, so it always covers the bend
+ * where the two rectangles meet.
  *
  * Limb length is the detected segment length times `armLength`; the segments
  * stay chained, so a short-armed body still connects shoulder to hand.
@@ -102,9 +105,18 @@ export class GeometricFigure {
     const chest = this.chestShape(pose, base);
     if (chest) shapes.push(chest);
 
-    shapes.push(...this.armShapes(pose, "left", base));
-    shapes.push(...this.armShapes(pose, "right", base));
-    shapes.push(...this.shoulderShapes(pose, base));
+    const leftArm = this.armParts(pose, "left", base);
+    const rightArm = this.armParts(pose, "right", base);
+
+    if (leftArm) shapes.push(...leftArm.segments);
+    if (rightArm) shapes.push(...rightArm.segments);
+
+    shapes.push(
+      ...this.jointShapes(pose, base, [
+        leftArm ? leftArm.elbow : null,
+        rightArm ? rightArm.elbow : null,
+      ])
+    );
 
     const head = this.headShape(pose, base);
     if (head) shapes.push(head);
@@ -178,20 +190,20 @@ export class GeometricFigure {
     };
   }
 
-  armShapes(pose, side, base) {
+  armParts(pose, side, base) {
     const shoulder = this.visiblePoint(pose, `${side}_shoulder`);
     const elbow = this.visiblePoint(pose, `${side}_elbow`);
-    if (!shoulder || !elbow) return [];
+    if (!shoulder || !elbow) return null;
 
     const { girth, armLength } = this.proportions;
     const upperVector = stretch(shoulder, elbow, armLength);
-    if (!upperVector) return [];
+    if (!upperVector) return null;
 
     const upperEnd = {
       x: shoulder.x + upperVector.x,
       y: shoulder.y + upperVector.y,
     };
-    const shapes = [
+    const segments = [
       rectangleBetween(
         shoulder,
         upperEnd,
@@ -200,36 +212,44 @@ export class GeometricFigure {
     ];
 
     const wrist = this.visiblePoint(pose, `${side}_wrist`);
-    if (!wrist) return shapes;
+    const forearmVector = wrist ? stretch(elbow, wrist, armLength) : null;
 
-    // The forearm follows the detected elbow->wrist direction, but starts
-    // where the stretched upper arm ended.
-    const forearmVector = stretch(elbow, wrist, armLength);
-    if (!forearmVector) return shapes;
+    if (forearmVector) {
+      // The forearm follows the detected elbow->wrist direction, but starts
+      // where the stretched upper arm ended.
+      const forearmEnd = {
+        x: upperEnd.x + forearmVector.x,
+        y: upperEnd.y + forearmVector.y,
+      };
+      segments.push(
+        rectangleBetween(
+          upperEnd,
+          forearmEnd,
+          base * girth * CONFIG.figure.ratios.forearmThickness
+        )
+      );
+    }
 
-    const forearmEnd = {
-      x: upperEnd.x + forearmVector.x,
-      y: upperEnd.y + forearmVector.y,
-    };
-    shapes.push(
-      rectangleBetween(
-        upperEnd,
-        forearmEnd,
-        base * girth * CONFIG.figure.ratios.forearmThickness
-      )
-    );
-
-    return shapes;
+    return { segments, elbow: upperEnd };
   }
 
-  shoulderShapes(pose, base) {
-    const radius =
-      base * this.proportions.girth * CONFIG.figure.ratios.shoulderRadius;
+  /** Joints sit on top of the rectangles: shoulders, then elbows. */
+  jointShapes(pose, base, elbows) {
+    const girth = this.proportions.girth;
+    const shoulderRadius = base * girth * CONFIG.figure.ratios.shoulderRadius;
+    const elbowRadius = base * girth * CONFIG.figure.ratios.elbowRadius;
+    const shapes = [];
 
-    return ["left", "right"].flatMap((side) => {
+    for (const side of ["left", "right"]) {
       const point = this.visiblePoint(pose, `${side}_shoulder`);
-      return point ? [circleAt(point, radius)] : [];
-    });
+      if (point) shapes.push(circleAt(point, shoulderRadius));
+    }
+
+    for (const elbow of elbows) {
+      if (elbow) shapes.push(circleAt(elbow, elbowRadius));
+    }
+
+    return shapes;
   }
 
   headShape(pose, base) {
