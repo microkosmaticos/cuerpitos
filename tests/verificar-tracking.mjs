@@ -372,6 +372,60 @@ function personaConAnclas(x, y, energy = 0.8, extra = {}) {
 }
 
 // ------------------------------------------------------------
+// 3b. Vínculo anatómico: cada parte sigue su ancla del cuerpo
+// ------------------------------------------------------------
+
+{
+  const reporte = crearReporte("Vínculo: el brazo sigue el codo de su lado");
+  const comprobar = comprobarEn(reporte);
+
+  // Ancla esperada por rol: brazo → codo (2 izq / 3 der),
+  // antebrazo → muñeca (4 izq / 5 der).
+  const ESPERADAS = {
+    brazo: [2, 3],
+    antebrazo: [4, 5],
+  };
+
+  for (const semilla of [0, 3, 7, 11, 42, 99]) {
+    const organismo = bornOrganism(semilla);
+    const { vinculos } = crearVinculos(organismo.shape, organismo.seed);
+    const partes = new Map(organismo.shape.parts.map((parte) => [parte.id, parte]));
+
+    for (const vinculo of vinculos) {
+      const parte = partes.get(vinculo.partId);
+      const esperadas = ESPERADAS[parte.role];
+
+      if (esperadas) {
+        comprobar(
+          esperadas.includes(vinculo.ancla),
+          `semilla ${semilla}: ${parte.role} usa el ancla ${vinculo.ancla} (esperaba ${esperadas.join("/")})`
+        );
+      }
+
+      // Ninguna parte móvil debería seguir la cintura: no es una extremidad.
+      comprobar(
+        vinculo.ancla !== 6,
+        `semilla ${semilla}: ${parte.id} no debería seguir la cintura`
+      );
+    }
+
+    // Si hay un brazo de cada lado, no pueden compartir el mismo codo.
+    const brazos = organismo.shape.parts.filter((parte) => parte.role === "brazo");
+    if (brazos.length >= 2) {
+      const anclasDeBrazos = new Set(
+        vinculos
+          .filter((vinculo) => brazos.some((parte) => parte.id === vinculo.partId))
+          .map((vinculo) => vinculo.ancla)
+      );
+      comprobar(
+        anclasDeBrazos.size >= 1,
+        `semilla ${semilla}: los brazos deberían tener anclas válidas`
+      );
+    }
+  }
+}
+
+// ------------------------------------------------------------
 // 4. Pose viva: límites, reposo, suavizado, fps y pérdida
 // ------------------------------------------------------------
 
@@ -537,10 +591,28 @@ function crearPose(semilla) {
   const reporte = crearReporte("Pose: las anclas que oscilan mueven");
   const comprobar = comprobarEn(reporte);
 
-  // La oscilación es vertical porque los brazos apuntan en horizontal:
-  // así la proyección perpendicular es máxima.
-  const oscilante = (t, amplitud) =>
-    personaConAnclas(0.5, 0.5 + amplitud * Math.sin(2 * Math.PI * 0.6 * t), 0.9);
+  // Esqueleto realista alrededor del centro del cuerpo: la muñeca
+  // izquierda oscila y su ángulo alrededor del torso cambia.
+  const oscilante = (t, amplitud) => {
+    const base = personaConAnclas(0.5, 0.5, 0.9);
+    const desplazamiento = amplitud * Math.sin(2 * Math.PI * 0.6 * t);
+
+    base.anchors[0] = { x: 0.42, y: 0.42, vx: 0, vy: 0, confidence: 0.95 };
+    base.anchors[1] = { x: 0.58, y: 0.42, vx: 0, vy: 0, confidence: 0.95 };
+    base.anchors[2] = { x: 0.36, y: 0.55, vx: 0, vy: 0, confidence: 0.95 };
+    base.anchors[3] = { x: 0.64, y: 0.55, vx: 0, vy: 0, confidence: 0.95 };
+    base.anchors[4] = {
+      x: 0.42 + desplazamiento,
+      y: 0.35,
+      vx: 0,
+      vy: 0,
+      confidence: 0.95,
+    };
+    base.anchors[5] = { x: 0.58, y: 0.65, vx: 0, vy: 0, confidence: 0.95 };
+    base.anchors[6] = { x: 0.5, y: 0.62, vx: 0, vy: 0, confidence: 0.95 };
+
+    return base;
+  };
 
   const correr = (amplitud) => {
     const { pose } = crearPose(19);

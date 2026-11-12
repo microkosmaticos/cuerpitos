@@ -60,9 +60,15 @@ cámara  →  ml5 bodyPose (MoveNet MULTIPOSE)  →  ParticipantTracker
   identidad generativa nueva en cada nacimiento (familia, paleta y
   semilla propias).
 - **Respuesta al movimiento** por el contrato de tracking de 7 anclas:
-  hombros, codos, muñecas y cintura. Quieto = organismo quieto.
+  hombros, codos, muñecas y cintura. El vínculo es **anatómico**: el brazo del
+  avatar sigue el codo de su mismo lado y el antebrazo sigue la muñeca, así que
+  levantar un brazo mueve el brazo correspondiente del avatar (con su propio
+  temperamento: ganancia, retraso, rigidez). Quieto = organismo quieto.
 - **Comportamientos**: el motor de reacciones elige eventos según
-  pesos, compatibilidad y tiempos de espera. El `SocialPacer` cambia
+  pesos, compatibilidad y tiempos de espera. Cada evento tiene una respuesta
+  visible: acercarse, abrazar (se juntan y se fusiona el brillo), besar, golpear
+  (retroceso y temblor), rechazar, desmayarse (se hunde y se apaga), estirar una
+  extremidad. El `SocialPacer` cambia
   emociones y relaciones cada tanto (y según la distancia entre las
   personas) para que las interacciones realmente ocurran.
 - **Sin espejo**: la imagen y los datos conservan la orientación real

@@ -156,3 +156,31 @@ bodypose.js y después actúan según las especificaciones de reaccions.js".
 - Verificado en Chrome headless con dos poses crudas inyectadas: dos avatares vivos,
   emociones distintas (`lovestruck`, `fainted`), relación `mutual_love` y eventos
   (`limb_stretch`, `faint`) sobre el fondo artístico, sin errores.
+
+### Ronda 5 — el cuerpo sigue al cuerpo y las reacciones se ven (12/11)
+
+Pedido: "los avatares solo cambian la escala; deberían responder a las reacciones y el
+cuerpo del avatar debe configurarse y seguir los movimientos de bodypose".
+
+Diagnóstico con la ruta real (poses crudas inyectadas, brazo moviéndose 130 px):
+- `crearVinculos` **barajaba** las anclas: cada parte seguía un punto al azar del cuerpo.
+- El estímulo era la proyección perpendicular a la dirección de reposo de la parte, así
+  que una parte que apuntaba en vertical no respondía a un movimiento vertical: los
+  ángulos medidos quedaban en 0–12° con un límite de 25°.
+- La energía promediaba las 7 anclas: un gesto de un solo brazo se diluía.
+
+Cambios:
+- `crearVinculos` es anatómico: brazo → codo de su lado (2/3), antebrazo → muñeca (4/5),
+  lado decidido por la geometría de la parte. El temperamento sigue siendo propio.
+- `OrganismPose` mide el **giro del ancla alrededor del centro del cuerpo** (media lenta)
+  en vez de la proyección perpendicular. Cualquier parte gira en el mismo sentido sin
+  importar su orientación de reposo. Límites a 38° / curvatura 0.16 / escala 0.08.
+- `TrackingAdapter` mezcla media y máximo de velocidad (50/50): un brazo alcanza.
+- `efectos.js`: respuestas de evento más grandes (abrazo/beso se juntan, golpe retrocede,
+  desmayo se hunde) y emociones más marcadas.
+- `BehaviorBridge` marca `autonomousLimb` durante `limb_stretch`, como declara el catálogo.
+
+Verificado en Chrome headless: energía 0.94 y ángulos de hasta ±32° siguiendo el brazo
+(antes 0–12°); dos capturas con el brazo arriba/abajo muestran el avatar articulándose; y
+un `hug` forzado mueve a los dos avatares hasta fusionarse. `npm test` en verde (175
+comprobaciones de tracking, incluidas las nuevas del vínculo anatómico).

@@ -189,25 +189,39 @@ export class TrackingAdapter {
     });
   }
 
-  /** Energía cruda 0..1 a partir del movimiento medio de todos los anclas. */
+  /**
+   * Energía cruda 0..1 a partir del movimiento de los anclas.
+   *
+   * Se mezcla la media con el máximo: si la persona mueve solo un brazo,
+   * la media de las 7 anclas se diluye y el gesto se perdería. Mitad y
+   * mitad mantiene la calma cuando todo está quieto y reacciona cuando
+   * una sola extremidad se mueve.
+   */
   medirMovimiento(anclas, velocidades, dt) {
     if (!(dt > 0)) return 0;
 
     let suma = 0;
     let cantidad = 0;
+    let maximo = 0;
 
     velocidades.forEach((velocidad, indice) => {
       if (!anclas[indice]) return;
       suma += velocidad.modulo;
+      if (velocidad.modulo > maximo) maximo = velocidad.modulo;
       cantidad += 1;
     });
 
     if (cantidad === 0) return 0;
 
     const media = suma / cantidad;
-    if (media <= ZONA_MUERTA) return 0;
+    const movimiento = media * 0.5 + maximo * 0.5;
 
-    return Math.min(1, (media - ZONA_MUERTA) / (ENERGIA_MAXIMA - ZONA_MUERTA));
+    if (movimiento <= ZONA_MUERTA) return 0;
+
+    return Math.min(
+      1,
+      (movimiento - ZONA_MUERTA) / (ENERGIA_MAXIMA - ZONA_MUERTA)
+    );
   }
 
   /** Apertura de la pose según el ancho de hombros (0..1). */

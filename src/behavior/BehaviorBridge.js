@@ -174,12 +174,22 @@ export class BehaviorBridge {
         duracion,
         partnerId: params?.partnerId ?? null,
       });
+
+      // El catálogo declara la extremidad autónoma como parte del estado:
+      // `limb_stretch` la ocupa mientras dura el evento.
+      const organismo = this.system.getOrganism(organismId);
+      if (organismo) {
+        organismo.autonomousLimb = behavior === "limb_stretch" ? "leftArm" : null;
+      }
       return;
     }
 
     if (phase === "end") {
       // La emoción ya la aplicó el motor antes de emitir esta directiva.
       this.activos.set(organismId, null);
+
+      const organismo = this.system.getOrganism(organismId);
+      if (organismo) organismo.autonomousLimb = null;
     }
   }
 }

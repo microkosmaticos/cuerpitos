@@ -10,13 +10,13 @@
 //   - la señal (1 = tracking pleno, 0 = sin datos)
 //
 // Cómo se mueve:
-//   - cada parte guarda una MEDIA LENTA de la posición de su ancla
-//     (MEMORIA_DE_ANCLA). El estímulo es el DESVÍO actual contra esa
-//     media: si el ancla se queda quieta, el desvío es 0 y la parte
-//     vuelve a su reposo, sin importar dónde esté parada la persona.
-//   - ese desvío se proyecta perpendicular a la dirección de reposo
-//     de la parte: un desplazamiento lateral la hace girar, uno
-//     radial no.
+//   - cada parte guarda una MEDIA LENTA del ÁNGULO de su ancla
+//     alrededor del centro del cuerpo (MEMORIA_DE_ANCLA). El estímulo
+//     es cuánto cambió ese ángulo: si la persona se traslada, el
+//     ángulo relativo no cambia y la parte no se mueve. Si levanta un
+//     brazo, el ángulo cambia y la parte lo acompaña.
+//   - como el estímulo es un giro, la parte gira en el mismo sentido
+//     sin importar hacia dónde apunta en reposo.
 //   - el objetivo pasa por un filtro exponencial (retraso) y después
 //     por un resorte amortiguado (rigidez/amortiguación).
 //
@@ -32,10 +32,10 @@ export const PASO_FIJO = 1 / 120;
 
 /** Límites de deformación. Nunca se superan. */
 export const LIMITES = congelarProfundo({
-  angulo: 25, // grados
-  curvatura: 0.1, // radianes de curvatura en la punta
-  escala: 0.06, // ±6 %
-  desplazamiento: 0.04, // ±4 % del lienzo
+  angulo: 38, // grados
+  curvatura: 0.16, // radianes de curvatura en la punta
+  escala: 0.08, // ±8 %
+  desplazamiento: 0.05, // ±5 % del lienzo
 });
 
 /** Debajo de esta energía todo se asienta en reposo. */
@@ -53,14 +53,15 @@ const CONFIANZA_MINIMA = 0.3;
  */
 export const MEMORIA_DE_ANCLA = 1.2;
 
-/**
- * Desplazamiento que equivale a la deformación máxima.
- * Un gesto de 8 % de la pantalla pide el 100 % del recorrido.
- */
-export const ESCALA_DE_DESVIO = 0.08;
-
 /** Debajo de esto se considera quieto y se congela en reposo. */
 const QUIETO = 1e-3;
+
+/**
+ * Giro del ancla que se considera respuesta completa, en radianes.
+ * Un brazo que gira ~29° alrededor del torso mueve la parte hasta el
+ * límite (multiplicado por el temperamento de cada organismo).
+ */
+const ANGULO_DE_REFERENCIA = 0.5;
 
 export class OrganismPose {
   /**
@@ -78,7 +79,7 @@ export class OrganismPose {
     this.acumulador = 0;
     this.tiempo = 0;
 
-    // Estado de cada parte y su ángulo de reposo (dirección original).
+    // Estado de cada parte.
     this.partes = new Map();
     for (const parte of shape.parts) {
       if (!this.vinculos.has(parte.id)) continue;
@@ -86,9 +87,8 @@ export class OrganismPose {
         angulo: 0, // radianes, respecto del reposo
         objetivo: 0,
         velocidad: 0,
-        reposo: anguloDeReposo(parte),
-        // Media lenta de la posición de su ancla (se inicializa al primer dato).
-        media: null,
+        // Media lenta del ángulo de su ancla (se inicializa al primer dato).
+        mediaAngulo: null,
       });
     }
 
@@ -151,32 +151,30 @@ export class OrganismPose {
       let deseo = 0;
 
       if (ancla && haySenal) {
-        // La primera vez, la media arranca en la posición actual:
+        const centro = persona.center ?? { x: 0.5, y: 0.5 };
+        const anguloActual = Math.atan2(ancla.y - centro.y, ancla.x - centro.x);
+
+        // La primera vez, la media arranca en el ángulo actual:
         // así no hay un tirón inicial.
-        if (!estadoParte.media) {
-          estadoParte.media = { x: ancla.x, y: ancla.y };
+        if (estadoParte.mediaAngulo === null) {
+          estadoParte.mediaAngulo = anguloActual;
         }
 
-        // Desvío contra la media lenta: quieto = 0, movimiento = > 0.
-        const desvioX = ancla.x - estadoParte.media.x;
-        const desvioY = ancla.y - estadoParte.media.y;
-
-        // Proyección perpendicular a la dirección de reposo de la parte.
-        const normalX = -Math.sin(estadoParte.reposo);
-        const normalY = Math.cos(estadoParte.reposo);
-        const proyeccion = desvioX * normalX + desvioY * normalY;
+        // Cuánto giró el ancla alrededor del cuerpo desde la media lenta.
+        const giro = normalizarAngulo(anguloActual - estadoParte.mediaAngulo);
 
         const maximo = gradosARadianes(LIMITES.angulo);
         deseo = acotar(
-          vinculo.ganancia * (proyeccion / ESCALA_DE_DESVIO) * intensidad,
+          vinculo.ganancia * (giro / ANGULO_DE_REFERENCIA) * intensidad,
           -maximo,
           maximo
         );
 
-        // La media se actualiza después de medir el desvío.
+        // La media se actualiza después de medir el giro.
         const alfaMedia = 1 - Math.exp(-paso / MEMORIA_DE_ANCLA);
-        estadoParte.media.x += desvioX * alfaMedia;
-        estadoParte.media.y += desvioY * alfaMedia;
+        estadoParte.mediaAngulo = normalizarAngulo(
+          estadoParte.mediaAngulo + giro * alfaMedia
+        );
       }
 
       // 1. Retraso: filtro exponencial del objetivo.
@@ -285,10 +283,12 @@ function gradosARadianes(grados) {
   return (grados * Math.PI) / 180;
 }
 
-/** Dirección en la que apunta la parte en reposo (desde su origen). */
-function anguloDeReposo(parte) {
-  const centro = centroide(parte.points);
-  return Math.atan2(centro.y - parte.origen.y, centro.x - parte.origen.x);
+/** Lleva un ángulo a (-π, π] para medir siempre el giro más corto. */
+function normalizarAngulo(angulo) {
+  let valor = angulo;
+  while (valor > Math.PI) valor -= Math.PI * 2;
+  while (valor <= -Math.PI) valor += Math.PI * 2;
+  return valor;
 }
 
 function centroide(puntos) {

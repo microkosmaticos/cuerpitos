@@ -39,53 +39,54 @@ const POR_EMOCION = Object.freeze({
   neutral: {},
 
   shy: {
-    escala: 0.9,
-    rotacion: -0.05,
-    temblor: 0.12,
-    halo: 0.6,
+    escala: 0.86,
+    rotacion: -0.12,
+    temblor: 0.18,
+    halo: 0.5,
   },
 
   attracted: {
-    acercar: 0.22,
-    escala: 1.02,
-    halo: 1.15,
+    acercar: 0.3,
+    escala: 1.03,
+    halo: 1.2,
   },
 
   lovestruck: {
-    acercar: 0.12,
-    halo: 1.35,
+    acercar: 0.18,
+    halo: 1.45,
   },
 
   euphoric: {
-    escala: 1.06,
-    salto: 0.22,
-    halo: 1.3,
+    escala: 1.08,
+    salto: 0.3,
+    halo: 1.4,
   },
 
   nauseous: {
-    rotacion: 0.12,
-    temblor: 0.3,
-    halo: 0.75,
+    rotacion: 0.18,
+    temblor: 0.45,
+    halo: 0.7,
   },
 
   fainted: {
-    escala: 0.88,
-    temblor: 0.05,
-    halo: 0.25,
+    escala: 0.8,
+    rotacion: 0.12,
+    temblor: 0.04,
+    halo: 0.15,
   },
 });
 
 /** Comportamientos: efecto que crece y se apaga con el progreso. */
 const POR_COMPORTAMIENTO = Object.freeze({
-  approach: { acercar: 0.55 },
-  hug: { acercar: 0.5, escala: 1.04, halo: 1.2 },
-  kiss: { acercar: 0.55, escala: 1.03, halo: 1.3 },
-  punch: { alejar: 0.35, temblor: 0.9, rotacion: 0.18 },
-  reject: { alejar: 0.45, rotacion: 0.1, halo: 0.7 },
-  euphoric_burst: { salto: 0.45, escala: 1.08, halo: 1.4 },
-  faint: { escala: 0.8, salto: -0.3, halo: 0.2 },
-  shake: { temblor: 0.8, rotacion: 0.15 },
-  limb_stretch: { extremidad: 1, escala: 1.02 },
+  approach: { acercar: 0.7 },
+  hug: { acercar: 0.85, escala: 1.06, halo: 1.35 },
+  kiss: { acercar: 0.95, escala: 1.05, halo: 1.5 },
+  punch: { alejar: 0.5, temblor: 1.2, rotacion: 0.25 },
+  reject: { alejar: 0.6, rotacion: 0.15, halo: 0.6 },
+  euphoric_burst: { salto: 0.55, escala: 1.12, halo: 1.5 },
+  faint: { escala: 0.72, salto: -0.4, halo: 0.15 },
+  shake: { temblor: 1.1, rotacion: 0.2 },
+  limb_stretch: { extremidad: 1.3, escala: 1.05 },
 });
 
 /**
