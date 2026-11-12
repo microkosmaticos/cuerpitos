@@ -1,5 +1,6 @@
 /**
- * Central configuration for stage 1: webcam + upper-body tracking.
+ * Central configuration: camera, pose model, geometric figure, eyes,
+ * participants and the background environment.
  *
  * Every tunable value lives here so the rest of the code reads as behaviour,
  * not as magic numbers. Change the model name to "BlazePose" to try the

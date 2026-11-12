@@ -31,7 +31,6 @@ export class SkeletonView {
     this.videoHeight = 0;
     this.upperBody = new Set(CONFIG.skeleton.upperBody);
     this.headMarkers = new Set(RIG_HEAD_MARKERS);
-    this.p = null;
 
     new p5((p) => this.createSketch(p), container);
   }
@@ -49,7 +48,6 @@ export class SkeletonView {
       } else {
         p.createCanvas(p.windowWidth, p.windowHeight);
       }
-      this.p = p;
     };
 
     p.draw = () => {
