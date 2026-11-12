@@ -112,6 +112,11 @@ export const CONFIG = {
       openTime: 0.09,
       // A blink shorter than this still reads as a blink, in milliseconds.
       minBlinkMs: 90,
+      // Autonomous idle blink: the figure blinks once every this many
+      // milliseconds, regardless of the person's tracking. 0 disables it.
+      autoBlinkMs: 2000,
+      // How long the autonomous blink keeps the lids closed, in milliseconds.
+      autoBlinkHoldMs: 120,
       // Keep the last position this long after the keypoint disappears, so a
       // blink closes in place instead of popping out.
       forgetMs: 700,

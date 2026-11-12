@@ -324,6 +324,20 @@ test("a long closure stays closed while the keypoints are gone", () => {
   assert.ok(parts(shapes).eyes[0].ry > openRy * 0.9, "reopens");
 });
 
+test("eyes blink on their own every two seconds", () => {
+  const figure = makeFigure();
+  const openRy = parts(figure.shapes(makePose(), 0)).eyes[0].ry;
+
+  assert.ok(parts(figure.shapes(makePose(), 1000)).eyes[0].ry > openRy * 0.95);
+
+  // The autonomous beat at 2 s closes the lids during its hold.
+  assert.ok(parts(figure.shapes(makePose(), 2050)).eyes[0].ry < openRy * 0.2);
+  assert.ok(parts(figure.shapes(makePose(), 2400)).eyes[0].ry > openRy * 0.9);
+
+  // The next beat repeats at 4 s.
+  assert.ok(parts(figure.shapes(makePose(), 4050)).eyes[0].ry < openRy * 0.2);
+});
+
 test("a single lost eye does not blink the whole face", () => {
   const figure = makeFigure();
   const open = parts(figure.shapes(makePose(), 0)).eyes;

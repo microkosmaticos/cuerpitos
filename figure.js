@@ -92,6 +92,8 @@ class EyeExpression {
     this.separation = null;
     this.angle = 0;
     this.updatedAt = null;
+    this.nextAutoBlinkAt = null;
+    this.autoBlinkUntil = null;
   }
 
   createState() {
@@ -143,32 +145,71 @@ class EyeExpression {
       this.angle = Math.atan2(dy, dx);
     }
 
+    const autoClosed = this.updateAutoBlink(now);
+
     for (const side of EYE_SIDES) {
       const state = this.state[side];
       const tracked = visible[side]
         ? this.targetOpenness(confidences[side])
         : 0;
+      const closedNow = autoClosed || tracked === 0;
+
+      if (closedNow && now != null && state.closedSince == null) {
+        state.closedSince = now;
+      }
 
       // A very short loss still has to read as a blink: keep the lid closed
       // until minBlinkMs has passed since it started closing.
       const heldClosed =
+        !closedNow &&
         now != null &&
         state.closedSince != null &&
         now - state.closedSince < config.minBlinkMs;
 
-      if (tracked === 0) {
-        if (now != null && state.closedSince == null) {
-          state.closedSince = now;
-        }
-      } else if (!heldClosed) {
-        state.closedSince = null;
-      }
+      if (!closedNow && !heldClosed) state.closedSince = null;
 
-      const target = heldClosed ? 0 : tracked;
+      const target = closedNow || heldClosed ? 0 : tracked;
       const tau =
         target < state.openness ? config.closeTime : config.openTime;
       state.openness = approach(state.openness, target, dt, tau);
     }
+  }
+
+  /**
+   * Autonomous idle blink: returns true while the scheduled blink keeps the
+   * lids closed, so the figure blinks on its own even when the tracking never
+   * loses the eyes.
+   */
+  updateAutoBlink(now) {
+    const { autoBlinkMs, autoBlinkHoldMs } = CONFIG.figure.eyes;
+    if (now == null || !(autoBlinkMs > 0)) return false;
+
+    if (this.nextAutoBlinkAt == null) {
+      this.nextAutoBlinkAt = now + autoBlinkMs;
+      return false;
+    }
+
+    if (this.autoBlinkUntil != null) {
+      if (now < this.autoBlinkUntil) return true;
+      this.autoBlinkUntil = null;
+    }
+
+    if (now < this.nextAutoBlinkAt) return false;
+
+    // Do not double-blink when the tracking is already closing the eyes.
+    if (this.currentOpenness() > 0.5) {
+      this.autoBlinkUntil = now + autoBlinkHoldMs;
+    }
+
+    this.nextAutoBlinkAt += autoBlinkMs;
+    // Do not fire a burst after a long pause (tab hidden, slow frame).
+    if (this.nextAutoBlinkAt <= now) this.nextAutoBlinkAt = now + autoBlinkMs;
+
+    return this.autoBlinkUntil != null;
+  }
+
+  currentOpenness() {
+    return Math.min(this.state.left.openness, this.state.right.openness);
   }
 
   deltaSeconds(now) {
