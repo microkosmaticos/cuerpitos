@@ -31,6 +31,14 @@ ajustes son los mismos. La página `fondo.html` sigue usando el sketch original.
 La cámara **no se muestra**: se enciende solo para detectar personas. El fondo nunca
 queda negro, porque la primera capa del fondo ya cubre toda la pantalla.
 
+### Primer encuentro
+
+Cuando se confirman las **dos personas** y nacen los dos avatares, la primera
+interacción no espera al azar: el sistema fija la relación (amor si están cerca,
+conflicto si están lejos), arranca un acercamiento y, apenas la pareja queda libre,
+ejecuta la reacción correspondiente (abrazo o golpe). Después sigue el ritmo social
+normal, con emociones y eventos aleatorios.
+
 ### Arranque automático
 
 No hay teclas ni modos que activar. Al abrir la página:

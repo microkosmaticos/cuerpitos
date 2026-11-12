@@ -255,6 +255,131 @@ function soloEvento(eventoId) {
 }
 
 // ------------------------------------------------------------
+// 5b. Primer encuentro inmediato
+// ------------------------------------------------------------
+
+{
+  const reporte = crearReporte("Encuentro: se dispara apenas hay dos");
+  const comprobar = comprobarEn(reporte);
+  let t = 6_000_000;
+  const puente = new BehaviorBridge({
+    ahora: () => t,
+    random: () => 0.5,
+    pacer: SIN_PACER,
+    pesos: soloEvento("hug"),
+  });
+
+  // El motor no podría decidir: su próxima decisión está lejísimos.
+  puente.motor._nextDecisionAt = t + 1_000_000;
+
+  puente.registrar("org-a");
+  puente.registrar("org-b");
+
+  t += 10;
+  puente.update({ distancia: 0.2 });
+
+  const a = puente.estadoDe("org-a");
+  const b = puente.estadoDe("org-b");
+
+  comprobar(a.comportamiento === "approach", "debería acercarse en el acto");
+  comprobar(b.comportamiento === "approach", "los dos deberían acercarse");
+  comprobar(a.parejaId === "org-b", "la pareja debería quedar enlazada");
+  comprobar(
+    puente.system.getRelationship("org-a", "org-b") === "mutual_love",
+    "de cerca, el encuentro debería dejar amor mutuo"
+  );
+  comprobar(
+    puente.emocionDe("org-a") === "attracted",
+    "de cerca, uno debería quedar atraído"
+  );
+  comprobar(
+    puente.encuentroHecho === true,
+    "el encuentro no debería repetirse en cada cuadro"
+  );
+
+  // Termina el acercamiento, pasa el cooldown y sigue el abrazo.
+  t += 1100;
+  puente.update({ distancia: 0.2 });
+  comprobar(
+    puente.estadoDe("org-a").comportamiento === null,
+    "el acercamiento debería terminar"
+  );
+
+  t += 2100;
+  puente.update({ distancia: 0.2 });
+  comprobar(
+    puente.estadoDe("org-a").comportamiento === "hug",
+    `después del encuentro debería venir el abrazo y vino ${puente.estadoDe("org-a").comportamiento}`
+  );
+  comprobar(
+    puente.estadoDe("org-a").progreso < 0.1,
+    "el abrazo debería arrancar recién"
+  );
+}
+
+{
+  const reporte = crearReporte("Encuentro: lejos es conflicto");
+  const comprobar = comprobarEn(reporte);
+  let t = 7_000_000;
+  const puente = new BehaviorBridge({
+    ahora: () => t,
+    random: () => 0.5,
+    pacer: SIN_PACER,
+    pesos: soloEvento("punch"),
+  });
+
+  puente.registrar("org-a");
+  puente.registrar("org-b");
+
+  t += 10;
+  puente.update({ distancia: 0.9 });
+
+  comprobar(
+    puente.system.getRelationship("org-a", "org-b") === "conflict",
+    "de lejos, el encuentro debería dejar conflicto"
+  );
+  comprobar(
+    puente.estadoDe("org-a").comportamiento === "approach",
+    "igual debería haber un primer acercamiento"
+  );
+
+  t += 1100;
+  puente.update({ distancia: 0.9 });
+  t += 2100;
+  puente.update({ distancia: 0.9 });
+
+  comprobar(
+    puente.estadoDe("org-a").comportamiento === "punch",
+    `en conflicto debería venir el golpe y vino ${puente.estadoDe("org-a").comportamiento}`
+  );
+}
+
+{
+  const reporte = crearReporte("Encuentro: uno solo no dispara nada");
+  const comprobar = comprobarEn(reporte);
+  let t = 8_000_000;
+  const puente = new BehaviorBridge({
+    ahora: () => t,
+    random: () => 0.5,
+    pacer: SIN_PACER,
+    pesos: soloEvento("approach"),
+  });
+
+  puente.registrar("org-a");
+  t += 10;
+  puente.update({ distancia: null });
+
+  comprobar(
+    puente.encuentroHecho === false,
+    "con un solo organismo no debería haber encuentro"
+  );
+  comprobar(
+    puente.estadoDe("org-a").comportamiento === null,
+    "tampoco debería arrancar un evento de a dos"
+  );
+}
+
+// ------------------------------------------------------------
 // 6. Pesos por defecto
 // ------------------------------------------------------------
 

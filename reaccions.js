@@ -712,6 +712,32 @@ class BehaviorEngine {
     return this;
   }
 
+  /**
+   * Inicia un evento concreto para unos actores, en el acto.
+   *
+   * Es la vía para reacciones que no deben esperar al azar (por ejemplo,
+   * el primer encuentro entre dos organismos). Respeta las mismas reglas
+   * que la selección: disponibilidad, emoción bloqueante y participantes.
+   *
+   * @param {string} eventId
+   * @param {OrganismState[]} actors
+   * @param {number} now
+   * @returns {boolean} true si el evento arrancó
+   */
+  provocar(eventId, actors, now = Date.now()) {
+    const event = EVENTS[eventId];
+    if (!event || !Array.isArray(actors) || actors.length === 0) return false;
+    if (actors.length > event.participants) return false;
+
+    for (const actor of actors) {
+      if (!actor || !actor.canAct(now)) return false;
+      if (actor.isBlockedByEmotion(eventId)) return false;
+    }
+
+    this._startCandidate({ eventId, actors }, now);
+    return true;
+  }
+
   /** Compañero actual de un organismo (el modelo contempla hasta dos). */
   _findPartner(self) {
     for (const other of this.system.organisms.values()) {

@@ -91,7 +91,8 @@ async function arrancar() {
   }
 
   controlador.estado(
-    `no se pudo iniciar la experiencia: ${ultimoError?.message ?? "error desconocido"}`
+    `no se pudo iniciar la experiencia: ${ultimoError?.message ?? "error desconocido"}`,
+    true
   );
 }
 

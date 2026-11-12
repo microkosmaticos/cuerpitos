@@ -184,3 +184,21 @@ Verificado en Chrome headless: energía 0.94 y ángulos de hasta ±32° siguiend
 (antes 0–12°); dos capturas con el brazo arriba/abajo muestran el avatar articulándose; y
 un `hug` forzado mueve a los dos avatares hasta fusionarse. `npm test` en verde (175
 comprobaciones de tracking, incluidas las nuevas del vínculo anatómico).
+
+### Ronda 6 — el encuentro no espera al azar (12/11)
+
+Pedido: "después que se confirmen las dos personas, se ejecute la reacción inmediatamente".
+
+- `BehaviorEngine.provocar(eventId, actors, now)`: arranca un evento concreto respetando
+  disponibilidad, emoción bloqueante y cantidad de participantes.
+- `BehaviorBridge.provocarEncuentro(distancia)`: al haber dos organismos fija la relación
+  (cerca → `mutual_love`, lejos → `conflict`), deja uno atraído y provoca `approach` en el
+  acto. Se ejecuta antes del motor para que ninguna decisión aleatoria se adelante.
+- `BehaviorBridge.intentarRemate()`: agenda la reacción del encuentro (`hug` con amor,
+  `punch` con conflicto) y la ejecuta apenas la pareja queda libre, con límite de 8 s.
+- El mensaje de carga dejó de ocupar el centro de la pantalla: va como línea del HUD. El
+  panel central queda solo para un error final.
+- Verificado en Chrome headless con dos poses inyectadas: el `approach` arranca en el mismo
+  cuadro en que nace el segundo avatar (cuadro 54) y el abrazo llega a 60 % sin errores.
+- `npm test`: 107 tests + 10 suites en verde (53 comprobaciones de comportamientos, con tres
+  nuevas del encuentro).

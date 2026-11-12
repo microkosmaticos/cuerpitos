@@ -79,8 +79,8 @@ const POR_EMOCION = Object.freeze({
 /** Comportamientos: efecto que crece y se apaga con el progreso. */
 const POR_COMPORTAMIENTO = Object.freeze({
   approach: { acercar: 0.7 },
-  hug: { acercar: 0.85, escala: 1.06, halo: 1.35 },
-  kiss: { acercar: 0.95, escala: 1.05, halo: 1.5 },
+  hug: { acercar: 0.6, escala: 1.05, halo: 1.3 },
+  kiss: { acercar: 0.68, escala: 1.04, halo: 1.45 },
   punch: { alejar: 0.5, temblor: 1.2, rotacion: 0.25 },
   reject: { alejar: 0.6, rotacion: 0.15, halo: 0.6 },
   euphoric_burst: { salto: 0.55, escala: 1.12, halo: 1.5 },

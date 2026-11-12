@@ -70,6 +70,7 @@ export class ExperienciaView {
     fps = 0,
     diagnostico = {},
     mensaje = null,
+    error = false,
   }) {
     const p = this.p;
     this.tiempo += (p.deltaTime || 0) / 1000;
@@ -103,6 +104,7 @@ export class ExperienciaView {
       fps,
       diagnostico,
       mensaje,
+      error,
     });
   }
 
@@ -354,7 +356,7 @@ export class ExperienciaView {
   // HUD
   // ------------------------------------------------------------
 
-  dibujarHud({ items, session, participantes, fps, diagnostico, mensaje }) {
+  dibujarHud({ items, session, participantes, fps, diagnostico, mensaje, error }) {
     const p = this.p;
     const minimo = CICLO.presencia.confianzaMinima;
 
@@ -375,7 +377,7 @@ export class ExperienciaView {
       16
     );
 
-    if (items.length === 0) {
+    if (items.length === 0 && !mensaje) {
       p.fill(255, 255, 255, 190);
       p.textSize(13);
       p.text(this.explicacionDeEspera(diagnostico, minimo), 24, 40);
@@ -405,10 +407,18 @@ export class ExperienciaView {
       );
     });
 
-    if (mensaje) {
-      p.fill(0, 0, 0, 185);
-      p.rect(p.width / 2 - 300, p.height / 2 - 34, 600, 68, 8);
-      p.fill(255, 255, 255, 235);
+    // Mientras carga, el estado va en el HUD. Solo un error final
+    // ocupa el centro de la pantalla.
+    if (mensaje && !error) {
+      p.fill(255, 226, 160, 220);
+      p.textSize(12);
+      p.text(mensaje, 24, 34);
+    }
+
+    if (mensaje && error) {
+      p.fill(0, 0, 0, 190);
+      p.rect(p.width / 2 - 320, p.height / 2 - 40, 640, 80, 10);
+      p.fill(255, 180, 180, 240);
       p.textAlign(p.CENTER, p.CENTER);
       p.textSize(14);
       p.text(mensaje, p.width / 2, p.height / 2);

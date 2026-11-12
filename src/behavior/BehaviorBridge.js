@@ -23,7 +23,10 @@ import {
   Reacciones,
   Weights,
 } from "../../reaccions.js";
-import { SocialPacer } from "./SocialPacer.js";
+import {
+  DISTANCIA_CERCANA,
+  SocialPacer,
+} from "./SocialPacer.js";
 
 /** Pausa mínima entre decisiones, en ms (agent.md: "habrá pausas"). */
 export const PAUSA_ENTRE_DECISIONES = 1400;
@@ -74,6 +77,12 @@ export class BehaviorBridge {
     /** organismoId → { evento, inicio, duracion, partnerId } */
     this.activos = new Map();
 
+    /** El primer encuentro de cada pareja se provoca una sola vez. */
+    this.encuentroHecho = false;
+
+    /** Reacción que remata el encuentro: abrazo o golpe. */
+    this.remate = null;
+
     this.system.events.on("directive", (directiva) => {
       this.aplicarDirectiva(directiva);
     });
@@ -94,6 +103,10 @@ export class BehaviorBridge {
   darDeBaja(organismoId) {
     this.system.unregisterOrganism(organismoId);
     this.activos.delete(organismoId);
+
+    // Con la pareja desarmada, la próxima vez que haya dos vuelve el encuentro.
+    this.encuentroHecho = false;
+    this.remate = null;
     return this;
   }
 
@@ -114,8 +127,107 @@ export class BehaviorBridge {
    */
   update({ distancia = null } = {}) {
     this.pacer.update(this.system, { distancia });
+
+    // En cuanto están los dos organismos, el encuentro no espera al azar.
+    // Va antes del motor para que ninguna decisión aleatoria se le adelante.
+    this.provocarEncuentro(distancia);
+
+    // Apenas la pareja queda libre, la reacción del encuentro se ejecuta.
+    this.intentarRemate();
+
     this.motor.update(this.ahora());
     return this;
+  }
+
+  // ------------------------------------------------------------
+  // Primer encuentro
+  // ------------------------------------------------------------
+
+  /**
+   * Dispara el primer encuentro de la pareja apenas están los dos
+   * organismos: fija la relación según la distancia real entre las
+   * personas, prepara la emoción y arranca `approach` en el acto.
+   *
+   * Sin esto, la primera interacción dependía de dos sorteos del ritmo
+   * social (emoción y relación) y podía tardar muchos segundos.
+   *
+   * @param {number|null} distancia distancia normalizada entre personas
+   * @returns {boolean} true si el encuentro arrancó
+   */
+  provocarEncuentro(distancia = null) {
+    if (this.encuentroHecho) return false;
+
+    const ids = this.organismos();
+    if (ids.length < 2) return false;
+
+    const ahora = this.ahora();
+    const [a, b] = ids.map((id) => this.system.getOrganism(id));
+    if (!a || !b) return false;
+
+    // Si alguno está ocupado, se reintenta en el próximo cuadro.
+    if (!a.canAct(ahora) || !b.canAct(ahora)) return false;
+
+    // Cerca tiende al amor; lejos, al conflicto (misma regla del ritmo social).
+    const cerca = distancia !== null && distancia < DISTANCIA_CERCANA;
+    const relacion = cerca ? "mutual_love" : "conflict";
+    this.system.setRelationship(a.id, b.id, relacion, ahora);
+
+    // Un organismo atraído habilita el abrazo; el conflicto habilita el golpe.
+    if (relacion === "mutual_love") {
+      a.setEmotion("attracted");
+      b.setEmotion("neutral");
+    }
+
+    const arranco = this.motor.provocar("approach", [a, b], ahora);
+    if (!arranco) {
+      // Deshacer lo preparado: se reintenta con la pareja libre.
+      this.system.setRelationship(a.id, b.id, null, ahora);
+      return false;
+    }
+
+    this.encuentroHecho = true;
+
+    // La reacción del encuentro queda agendada: abrazo si hay amor,
+    // golpe si hay conflicto. Se ejecuta apenas la pareja queda libre.
+    this.remate = {
+      evento: relacion === "mutual_love" ? "hug" : "punch",
+      limite: ahora + 8000,
+    };
+
+    // Que la reacción siguiente pueda encadenarse apenas termine el acercamiento.
+    const duracion = a.activeEvent?.duration ?? EVENTS.approach.duration[0];
+    this.motor._nextDecisionAt = ahora + duracion + 1;
+
+    return true;
+  }
+
+  /**
+   * Ejecuta la reacción agendada del encuentro (abrazo o golpe) apenas
+   * los dos organismos pueden actuar: sin evento activo y sin cooldown.
+   * Reintenta cada cuadro hasta el límite, después deja seguir al azar.
+   *
+   * @returns {boolean} true si la reacción arrancó
+   */
+  intentarRemate() {
+    if (!this.remate) return false;
+
+    const ahora = this.ahora();
+    if (ahora > this.remate.limite) {
+      this.remate = null;
+      return false;
+    }
+
+    const ids = this.organismos();
+    if (ids.length < 2) {
+      this.remate = null;
+      return false;
+    }
+
+    const [a, b] = ids.map((id) => this.system.getOrganism(id));
+    const arranco = this.motor.provocar(this.remate.evento, [a, b], ahora);
+    if (arranco) this.remate = null;
+
+    return arranco;
   }
 
   // ------------------------------------------------------------

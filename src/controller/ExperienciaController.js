@@ -60,6 +60,7 @@ export class ExperienciaController {
     this.participantes = 0;
     this.fps = 0;
     this.mensaje = null;
+    this.error = false;
 
     // Diagnóstico para el HUD: qué ve el modelo y en qué anda.
     this.detecciones = 0;
@@ -241,6 +242,7 @@ export class ExperienciaController {
       participantes: this.participantes,
       fps: this.fps,
       mensaje: this.mensaje,
+      error: this.error,
       diagnostico: {
         detecciones: this.detecciones,
         mejorConfianza: this.mejorConfianza,
@@ -249,9 +251,14 @@ export class ExperienciaController {
     });
   }
 
-  /** Mensaje para el HUD ("cargando modelo…", errores de cámara). */
-  estado(mensaje) {
+  /**
+   * Mensaje para el HUD ("cargando modelo…", errores de cámara).
+   * @param {string|null} mensaje
+   * @param {boolean} error true solo cuando ya no se puede continuar
+   */
+  estado(mensaje, error = false) {
     this.mensaje = mensaje;
+    this.error = Boolean(error) && Boolean(mensaje);
     return this;
   }
 }
