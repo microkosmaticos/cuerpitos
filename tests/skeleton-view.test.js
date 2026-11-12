@@ -24,6 +24,8 @@ function createPainter() {
     rectangles: [],
     rotations: [],
     background() {},
+    clear() {},
+    background() {},
     createCanvas() {},
     resizeCanvas() {},
     color(hex) {

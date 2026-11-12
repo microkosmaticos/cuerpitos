@@ -111,7 +111,8 @@ export class SkeletonView {
   }
 
   render(p) {
-    p.background(0);
+    // Transparent: the rescued environment paints behind this canvas.
+    p.clear();
 
     const transform = this.transform(p);
     if (!transform) return;
