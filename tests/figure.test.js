@@ -84,7 +84,9 @@ function parts(shapes) {
     leftShoulder: circles[0],
     rightShoulder: circles[1],
     leftElbow: circles[2],
-    rightElbow: circles[3],
+    leftHand: circles[3],
+    rightElbow: circles[4],
+    rightHand: circles[5],
     head: circles[circles.length - 1],
   };
 }
@@ -136,7 +138,9 @@ test("a neutral body follows the detected joints", () => {
     leftShoulder,
     rightShoulder,
     leftElbow,
+    leftHand,
     rightElbow,
+    rightHand,
     head,
   } = parts(makeFigure().shapes(makePose()));
 
@@ -167,6 +171,11 @@ test("a neutral body follows the detected joints", () => {
   approx(leftElbow.radius, 13, "elbow radius");
   approx(rightElbow.x, 400, "right elbow x");
 
+  approx(leftHand.x, 220, "left hand x");
+  approx(leftHand.y, 350, "left hand y");
+  approx(leftHand.radius, 15, "hand radius");
+  approx(rightHand.x, 420, "right hand x");
+
   approx(head.x, 320, "head x");
   approx(head.y, 115, "head y");
   approx(head.radius, 30, "head radius");
@@ -182,6 +191,8 @@ test("girth changes thickness without changing limb length or head size", () => 
   approx(thin.head.radius, wide.head.radius, "head radius");
   approx(thin.leftElbow.radius, 13 * 0.6, "thin elbow");
   approx(wide.leftElbow.radius, 13 * 1.8, "wide elbow");
+  approx(thin.leftHand.radius, 15 * 0.6, "thin hand");
+  approx(wide.leftHand.radius, 15 * 1.8, "wide hand");
 });
 
 test("arm length stretches both segments and keeps the chain connected", () => {
@@ -215,6 +226,16 @@ test("the elbow circle covers the bend of the figure", () => {
   approx(leftElbow.radius, 13, "elbow radius");
 });
 
+test("the hand circle caps the forearm", () => {
+  const shapes = makeFigure({ armLength: 1.4 }).shapes(makePose());
+  const { leftForearm, leftHand } = parts(shapes);
+  const forearmEnd = endOf(leftForearm, 1);
+
+  approx(leftHand.x, forearmEnd.x, "hand x");
+  approx(leftHand.y, forearmEnd.y, "hand y");
+  approx(leftHand.radius, 15, "hand radius");
+});
+
 test("head size varies independently of the arms", () => {
   const small = parts(makeFigure({ headSize: 0.16 }).shapes(makePose()));
   const big = parts(makeFigure({ headSize: 0.42 }).shapes(makePose()));
@@ -232,8 +253,8 @@ test("eyes sit on the tracked eye keypoints", () => {
   approx(eyes[0].x, 310, "left eye x");
   approx(eyes[0].y, 110, "left eye y");
   approx(eyes[1].x, 330, "right eye x");
-  approx(eyes[0].rx, 20 * CONFIG.figure.ratios.eyeWidth, "eye rx");
-  approx(eyes[0].ry, 20 * CONFIG.figure.ratios.eyeHeight, "eye ry");
+  approx(eyes[0].rx, 30 * CONFIG.figure.ratios.eyeWidth, "eye rx");
+  approx(eyes[0].ry, 30 * CONFIG.figure.ratios.eyeHeight, "eye ry");
   assert.ok(eyes[0].ry > eyes[0].rx, "eyes are vertically oval");
   approx(eyes[0].angle, 0, "eye angle");
   assert.equal(eyes[0].fill, "#000000");
@@ -248,11 +269,7 @@ test("eyes tilt with the tracked eye axis", () => {
   );
 
   approx(eyes[0].angle, Math.atan2(20, 40), "eye axis angle");
-  approx(
-    eyes[0].rx,
-    Math.hypot(40, 20) * CONFIG.figure.ratios.eyeWidth,
-    "eye rx"
-  );
+  approx(eyes[0].rx, 30 * CONFIG.figure.ratios.eyeWidth, "eye rx");
 });
 
 test("a single visible eye is still drawn", () => {
@@ -262,13 +279,7 @@ test("a single visible eye is still drawn", () => {
   approx(eyes[0].x, 310, "eye x");
 
   const headRadius = 100 * 0.3;
-  approx(
-    eyes[0].rx,
-    headRadius *
-      CONFIG.figure.ratios.eyeFallbackSeparation *
-      CONFIG.figure.ratios.eyeWidth,
-    "eye rx"
-  );
+  approx(eyes[0].rx, headRadius * CONFIG.figure.ratios.eyeWidth, "eye rx");
   approx(eyes[0].angle, 0, "eye angle");
 });
 
@@ -285,43 +296,8 @@ test("eyes scale with the body", () => {
 
   approx(eyes[0].x, 320 + (310 - 320) * 1.5, "eye x");
   approx(eyes[0].y, 200 + (110 - 200) * 1.5, "eye y");
-  approx(eyes[0].rx, 20 * CONFIG.figure.ratios.eyeWidth * 1.5, "eye rx");
-  approx(eyes[0].ry, 20 * CONFIG.figure.ratios.eyeHeight * 1.5, "eye ry");
-});
-
-test("a one-frame blink still closes and reopens", () => {
-  const figure = makeFigure();
-  const open = parts(figure.shapes(makePose(), 0)).eyes;
-  const openRy = open[0].ry;
-
-  // One frame without eye keypoints is enough to close the lid.
-  const blink = makePose({ left_eye: null, right_eye: null });
-  figure.shapes(blink, 16);
-
-  const closed = parts(figure.shapes(blink, 40)).eyes;
-  assert.ok(closed[0].ry < openRy * 0.5, "the lid closes fast");
-  approx(closed[0].x, open[0].x, "closed eye x");
-
-  // The keypoints come back after 50 ms, but the minimum blink keeps it shut.
-  const held = parts(figure.shapes(makePose(), 60)).eyes;
-  assert.ok(held[0].ry < openRy * 0.5, "short blinks still read");
-
-  let shapes;
-  for (let t = 76; t <= 420; t += 16) shapes = figure.shapes(makePose(), t);
-  assert.ok(parts(shapes).eyes[0].ry > openRy * 0.95, "the lid reopens");
-});
-
-test("a long closure stays closed while the keypoints are gone", () => {
-  const figure = makeFigure();
-  const openRy = parts(figure.shapes(makePose(), 0)).eyes[0].ry;
-
-  const blink = makePose({ left_eye: null, right_eye: null });
-  let shapes;
-  for (let t = 16; t <= 400; t += 16) shapes = figure.shapes(blink, t);
-  assert.ok(parts(shapes).eyes[0].ry < openRy * 0.2, "stays closed");
-
-  for (let t = 416; t <= 700; t += 16) shapes = figure.shapes(makePose(), t);
-  assert.ok(parts(shapes).eyes[0].ry > openRy * 0.9, "reopens");
+  approx(eyes[0].rx, 30 * CONFIG.figure.ratios.eyeWidth * 1.5, "eye rx");
+  approx(eyes[0].ry, 30 * CONFIG.figure.ratios.eyeHeight * 1.5, "eye ry");
 });
 
 test("eyes blink on their own every two seconds", () => {
@@ -338,7 +314,7 @@ test("eyes blink on their own every two seconds", () => {
   assert.ok(parts(figure.shapes(makePose(), 4050)).eyes[0].ry < openRy * 0.2);
 });
 
-test("a single lost eye does not blink the whole face", () => {
+test("a lost eye keeps its shape and position", () => {
   const figure = makeFigure();
   const open = parts(figure.shapes(makePose(), 0)).eyes;
   const openRy = open[0].ry;
@@ -350,29 +326,11 @@ test("a single lost eye does not blink the whole face", () => {
 
   const eyes = parts(shapes).eyes;
   assert.equal(eyes.length, 2, "the lost eye keeps its last position");
-  const left = eyes.find((eye) => eye.x === 310);
-  const right = eyes.find((eye) => eye.x === 330);
-  assert.ok(left.ry > openRy * 0.9, "the visible eye stays open");
-  assert.ok(right.ry < openRy * 0.5, "the lost eye closes");
-});
-
-test("a confidence drop squints the eyes", () => {
-  const figure = makeFigure();
-  const openRy = parts(figure.shapes(makePose(), 0)).eyes[0].ry;
-
-  const squint = makePose({
-    left_eye: { x: 310, y: 110, confidence: 0.4 },
-    right_eye: { x: 330, y: 110, confidence: 0.4 },
-  });
-
-  let shapes;
-  for (let t = 16; t <= 400; t += 16) shapes = figure.shapes(squint, t);
-
-  const squinting = parts(shapes).eyes;
-  assert.equal(squinting.length, 2, "a squint keeps both eyes");
-  const ratio = squinting[0].ry / openRy;
-  assert.ok(ratio < 0.75, "the eye narrows");
-  assert.ok(ratio > 0.3, "the eye does not fully close");
+  for (const eye of eyes) {
+    approx(eye.ry, openRy, "tracking never deforms the eye");
+  }
+  approx(eyes.find((eye) => eye.x === 310).x, 310, "visible eye x");
+  approx(eyes.find((eye) => eye.x === 330).x, 330, "lost eye x");
 });
 
 test("eyes are forgotten after a long loss", () => {
@@ -409,7 +367,7 @@ test("rectangles have soft corners", () => {
 });
 
 test("size scales the whole body around the chest", () => {
-  const { chest, leftUpper, leftShoulder, leftElbow, head } = parts(
+  const { chest, leftUpper, leftShoulder, leftElbow, leftHand, head } = parts(
     makeFigure({ size: 1.5 }).shapes(makePose())
   );
 
@@ -436,6 +394,10 @@ test("size scales the whole body around the chest", () => {
   approx(leftElbow.x, 200, "elbow x");
   approx(leftElbow.y, 320, "elbow y");
   approx(leftElbow.radius, 19.5, "elbow radius");
+
+  approx(leftHand.x, 170, "hand x");
+  approx(leftHand.y, 425, "hand y");
+  approx(leftHand.radius, 22.5, "hand radius");
 
   approx(head.x, 320, "head x");
   approx(head.y, 72.5, "head y");
@@ -468,8 +430,8 @@ test("no head reference means no head circle", () => {
     })
   );
 
-  // Both shoulders and both elbows, no head.
-  assert.equal(shapes.filter((shape) => shape.kind === "circle").length, 4);
+  // Both shoulders, elbows and hands, no head.
+  assert.equal(shapes.filter((shape) => shape.kind === "circle").length, 6);
 });
 
 test("an arm without an elbow is not drawn", () => {

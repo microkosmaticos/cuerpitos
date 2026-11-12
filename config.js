@@ -98,27 +98,18 @@ export const CONFIG = {
     // Oval eyes, placed on the tracked eye keypoints.
     eyeColor: "#000000",
 
-    // MoveNet has no eyelids, so openness is inferred from the eye keypoint:
-    // if it disappears the lid closes (blink), and a confidence drop narrows
-    // it (squint). Both are smoothed over time.
+    // MoveNet has no eyelids, so the eyes only read position and angle from
+    // the tracking: confidence never changes their shape. The only opening and
+    // closing is the autonomous blink below.
     eyes: {
-      // Confidence at which the eye counts as fully open.
-      openConfidence: 0.55,
-      // Openness reached at the minimum confidence while the eye is tracked.
-      minOpenness: 0.25,
-      // Exponential time constants, in seconds. Fast close and quick reopen
-      // keep the lids faithful to the real blink.
+      // Exponential time constants for the autonomous blink, in seconds.
       closeTime: 0.03,
       openTime: 0.09,
-      // A blink shorter than this still reads as a blink, in milliseconds.
-      minBlinkMs: 90,
-      // Autonomous idle blink: the figure blinks once every this many
-      // milliseconds, regardless of the person's tracking. 0 disables it.
+      // The figure blinks once every this many milliseconds. 0 disables it.
       autoBlinkMs: 2000,
       // How long the autonomous blink keeps the lids closed, in milliseconds.
       autoBlinkHoldMs: 120,
-      // Keep the last position this long after the keypoint disappears, so a
-      // blink closes in place instead of popping out.
+      // Keep the last position this long after the keypoint disappears.
       forgetMs: 700,
       // A fully closed eye is a thin line at this fraction of its open height.
       closedHeight: 0.08,
@@ -145,15 +136,14 @@ export const CONFIG = {
       chestLength: 0.9,
       shoulderRadius: 0.13,
       elbowRadius: 0.13,
+      // Hands are only a circle: no fingers are tracked.
+      handRadius: 0.15,
       upperArmThickness: 0.17,
       forearmThickness: 0.14,
-      // Eye oval half-axes, as fractions of the tracked eye separation.
-      // Taller than wide: vertical ovals, a bit larger than the previous eyes.
-      eyeWidth: 0.2,
-      eyeHeight: 0.3,
-      // Eye separation fallback (fraction of head radius) when only one eye
-      // is visible and the distance between both cannot be measured.
-      eyeFallbackSeparation: 0.55,
+      // Eye oval half-axes, as fractions of the figure's head radius, so the
+      // tracking can never resize them. Taller than wide.
+      eyeWidth: 0.16,
+      eyeHeight: 0.24,
     },
   },
 

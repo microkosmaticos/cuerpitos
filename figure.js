@@ -76,12 +76,12 @@ export class FigureProportions {
 const EYE_SIDES = ["left", "right"];
 
 /**
- * Eyelid state inferred from the eye keypoints.
+ * Eye positions plus an autonomous blink.
  *
- * MoveNet tracks the eye centre, not the eyelids, so openness is derived from
- * the only available signals: keypoint presence (lost -> blink) and keypoint
- * confidence (drop -> squint). Both are smoothed over time, and the last
- * position is kept briefly so a blink closes in place instead of popping out.
+ * MoveNet tracks the eye centre, not the eyelids, so the tracking is only used
+ * to read the position and the eye-axis angle. The lids never react to
+ * keypoint confidence or loss (that deformed the ovals); the only blink is the
+ * scheduled one, once every `autoBlinkMs`.
  */
 class EyeExpression {
   constructor() {
@@ -89,21 +89,15 @@ class EyeExpression {
       left: this.createState(),
       right: this.createState(),
     };
-    this.separation = null;
     this.angle = 0;
     this.updatedAt = null;
+    this.openness = 1;
     this.nextAutoBlinkAt = null;
     this.autoBlinkUntil = null;
   }
 
   createState() {
-    return {
-      x: null,
-      y: null,
-      openness: 1,
-      lastSeenAt: null,
-      closedSince: null,
-    };
+    return { x: null, y: null, lastSeenAt: null };
   }
 
   update(pose, now) {
@@ -113,16 +107,15 @@ class EyeExpression {
     if (now != null) this.updatedAt = now;
 
     const visible = { left: null, right: null };
-    const confidences = { left: 0, right: 0 };
 
     for (const side of EYE_SIDES) {
       const state = this.state[side];
       const point = pose.get(`${side}_eye`);
       const confidence = point ? point.confidence ?? 0 : 0;
-      confidences[side] = confidence;
-
       const isVisible = Boolean(point) && confidence >= minConfidence;
 
+      // Only the position is read from the tracking. Confidence never changes
+      // the shape of the eye, so the ovals cannot deform with tracking noise.
       if (isVisible) {
         state.x = point.x;
         state.y = point.y;
@@ -141,38 +134,13 @@ class EyeExpression {
     if (visible.left && visible.right) {
       const dx = visible.right.x - visible.left.x;
       const dy = visible.right.y - visible.left.y;
-      this.separation = Math.hypot(dx, dy);
       this.angle = Math.atan2(dy, dx);
     }
 
-    const autoClosed = this.updateAutoBlink(now);
-
-    for (const side of EYE_SIDES) {
-      const state = this.state[side];
-      const tracked = visible[side]
-        ? this.targetOpenness(confidences[side])
-        : 0;
-      const closedNow = autoClosed || tracked === 0;
-
-      if (closedNow && now != null && state.closedSince == null) {
-        state.closedSince = now;
-      }
-
-      // A very short loss still has to read as a blink: keep the lid closed
-      // until minBlinkMs has passed since it started closing.
-      const heldClosed =
-        !closedNow &&
-        now != null &&
-        state.closedSince != null &&
-        now - state.closedSince < config.minBlinkMs;
-
-      if (!closedNow && !heldClosed) state.closedSince = null;
-
-      const target = closedNow || heldClosed ? 0 : tracked;
-      const tau =
-        target < state.openness ? config.closeTime : config.openTime;
-      state.openness = approach(state.openness, target, dt, tau);
-    }
+    // The only thing that opens and closes the lids is the autonomous blink.
+    const target = this.updateAutoBlink(now) ? 0 : 1;
+    const tau = target < this.openness ? config.closeTime : config.openTime;
+    this.openness = approach(this.openness, target, dt, tau);
   }
 
   /**
@@ -196,20 +164,12 @@ class EyeExpression {
 
     if (now < this.nextAutoBlinkAt) return false;
 
-    // Do not double-blink when the tracking is already closing the eyes.
-    if (this.currentOpenness() > 0.5) {
-      this.autoBlinkUntil = now + autoBlinkHoldMs;
-    }
-
+    this.autoBlinkUntil = now + autoBlinkHoldMs;
     this.nextAutoBlinkAt += autoBlinkMs;
     // Do not fire a burst after a long pause (tab hidden, slow frame).
     if (this.nextAutoBlinkAt <= now) this.nextAutoBlinkAt = now + autoBlinkMs;
 
-    return this.autoBlinkUntil != null;
-  }
-
-  currentOpenness() {
-    return Math.min(this.state.left.openness, this.state.right.openness);
+    return true;
   }
 
   deltaSeconds(now) {
@@ -217,25 +177,11 @@ class EyeExpression {
     return Math.min(0.25, Math.max(0, (now - this.updatedAt) / 1000));
   }
 
-  /** 1 when the eye is clearly visible, 0 when it is gone (target closed). */
-  targetOpenness(confidence) {
-    const { minOpenness, openConfidence } = CONFIG.figure.eyes;
-    const minConfidence = CONFIG.skeleton.minConfidence;
-    const range = Math.max(1e-6, openConfidence - minConfidence);
-    const t = Math.min(1, Math.max(0, (confidence - minConfidence) / range));
-
-    return minOpenness + (1 - minOpenness) * t;
-  }
-
   shapes(headRadius) {
     const ratios = CONFIG.figure.ratios;
     const eyes = CONFIG.figure.eyes;
-    const separation =
-      this.separation ?? headRadius * ratios.eyeFallbackSeparation;
-    if (!(separation > 0)) return [];
-
-    const rx = separation * ratios.eyeWidth;
-    const openRy = separation * ratios.eyeHeight;
+    const rx = headRadius * ratios.eyeWidth;
+    const openRy = headRadius * ratios.eyeHeight;
 
     return EYE_SIDES.map((side) => this.state[side])
       .filter((state) => state.x != null && state.y != null)
@@ -243,7 +189,7 @@ class EyeExpression {
         eyeAt(
           { x: state.x, y: state.y },
           rx,
-          openRy * Math.max(state.openness, eyes.closedHeight),
+          openRy * Math.max(this.openness, eyes.closedHeight),
           this.angle,
           CONFIG.figure.eyeColor
         )
@@ -263,9 +209,9 @@ function approach(current, target, dt, tau) {
  * Shapes:
  *   rectangle  between shoulder and elbow, and between elbow and wrist.
  *   rectangle  chest/torso, between the shoulder line and the hips.
- *   circle     head, plus one per shoulder and per elbow.
- *   ellipse    two black oval eyes, driven by the eye keypoints: they blink
- *              when a keypoint disappears and squint when its confidence drops.
+ *   circle     head, plus one per shoulder, per elbow and per hand.
+ *   ellipse    two black oval eyes on the tracked eye keypoints, with an
+ *              autonomous blink every `autoBlinkMs`.
  *
  * The elbow circle follows the stretched arm, so it always covers the bend
  * where the two rectangles meet.
@@ -298,12 +244,7 @@ export class GeometricFigure {
     if (leftArm) shapes.push(...leftArm.segments);
     if (rightArm) shapes.push(...rightArm.segments);
 
-    shapes.push(
-      ...this.jointShapes(pose, base, [
-        leftArm ? leftArm.elbow : null,
-        rightArm ? rightArm.elbow : null,
-      ])
-    );
+    shapes.push(...this.jointShapes(pose, base, [leftArm, rightArm]));
 
     const head = this.headShape(pose, base);
     if (head) {
@@ -409,6 +350,7 @@ export class GeometricFigure {
 
     const wrist = this.visiblePoint(pose, `${side}_wrist`);
     const forearmVector = wrist ? stretch(elbow, wrist, armLength) : null;
+    let hand = null;
 
     if (forearmVector) {
       // The forearm follows the detected elbow->wrist direction, but starts
@@ -424,16 +366,18 @@ export class GeometricFigure {
           base * girth * CONFIG.figure.ratios.forearmThickness
         )
       );
+      hand = forearmEnd;
     }
 
-    return { segments, elbow: upperEnd };
+    return { segments, elbow: upperEnd, hand };
   }
 
-  /** Joints sit on top of the rectangles: shoulders, then elbows. */
-  jointShapes(pose, base, elbows) {
+  /** Joints sit on top of the rectangles: shoulders, elbows and hands. */
+  jointShapes(pose, base, arms) {
     const girth = this.proportions.girth;
     const shoulderRadius = base * girth * CONFIG.figure.ratios.shoulderRadius;
     const elbowRadius = base * girth * CONFIG.figure.ratios.elbowRadius;
+    const handRadius = base * girth * CONFIG.figure.ratios.handRadius;
     const shapes = [];
 
     for (const side of ["left", "right"]) {
@@ -441,8 +385,11 @@ export class GeometricFigure {
       if (point) shapes.push(circleAt(point, shoulderRadius));
     }
 
-    for (const elbow of elbows) {
-      if (elbow) shapes.push(circleAt(elbow, elbowRadius));
+    for (const arm of arms) {
+      if (!arm) continue;
+      shapes.push(circleAt(arm.elbow, elbowRadius));
+      // The hand is the end of the stretched forearm, not a finger keypoint.
+      if (arm.hand) shapes.push(circleAt(arm.hand, handRadius));
     }
 
     return shapes;
