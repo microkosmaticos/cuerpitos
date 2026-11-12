@@ -186,31 +186,61 @@ export class SkeletonView {
    * cover transform used by the skeleton applies here.
    */
   drawFigure(p, figure, pose, transform, colors, alpha) {
-    const shapes = figure.shapes(pose);
+    const shapes = figure.shapes(pose, p.millis());
     const scale = transform.scale;
-
-    p.stroke(this.withAlpha(p, colors.joint, alpha));
-    p.strokeWeight(CONFIG.figure.strokeWeight);
-    p.fill(this.withAlpha(p, colors.bone, alpha));
 
     for (const shape of shapes) {
       const center = this.project(shape, transform);
+      this.styleShape(p, shape, colors, alpha);
 
       if (shape.kind === "circle") {
         p.circle(center.x, center.y, shape.radius * 2 * scale);
         continue;
       }
 
+      if (shape.kind === "ellipse") {
+        this.drawRotated(p, shape, center, () => {
+          p.ellipse(0, 0, shape.rx * 2 * scale, shape.ry * 2 * scale);
+        });
+        continue;
+      }
+
       if (shape.kind !== "rectangle") continue;
 
-      p.push();
-      p.translate(center.x, center.y);
-      // Mirroring flips x, which reverses the rotation direction.
-      p.rotate(CONFIG.skeleton.mirror ? -shape.angle : shape.angle);
-      p.rectMode(p.CENTER);
-      p.rect(0, 0, shape.length * scale, shape.thickness * scale);
-      p.pop();
+      this.drawRotated(p, shape, center, () => {
+        p.rectMode(p.CENTER);
+        p.rect(
+          0,
+          0,
+          shape.length * scale,
+          shape.thickness * scale,
+          shape.radius * scale
+        );
+      });
     }
+  }
+
+  /** A shape can override the palette, e.g. the black oval eyes. */
+  styleShape(p, shape, colors, alpha) {
+    if (shape.fill) {
+      p.noStroke();
+      p.fill(this.withAlpha(p, shape.fill, alpha));
+      return;
+    }
+
+    p.stroke(this.withAlpha(p, colors.joint, alpha));
+    p.strokeWeight(CONFIG.figure.strokeWeight);
+    p.fill(this.withAlpha(p, colors.bone, alpha));
+  }
+
+  /** Rotated shapes need the mirror-aware angle. */
+  drawRotated(p, shape, center, draw) {
+    p.push();
+    p.translate(center.x, center.y);
+    // Mirroring flips x, which reverses the rotation direction.
+    p.rotate(CONFIG.skeleton.mirror ? -shape.angle : shape.angle);
+    draw();
+    p.pop();
   }
 
   drawPose(p, pose, transform, colors, alpha, drawHead) {

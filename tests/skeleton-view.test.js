@@ -19,9 +19,13 @@ function createPainter() {
     RIGHT: "right",
     BOTTOM: "bottom",
     CENTER: "center",
+    millis() {
+      return 0;
+    },
     labels: [],
     circles: [],
     rectangles: [],
+    ellipses: [],
     rotations: [],
     background() {},
     clear() {},
@@ -39,6 +43,9 @@ function createPainter() {
     circle(x, y, diameter) {
       this.circles.push({ x, y, diameter });
     },
+    ellipse(x, y, width, height) {
+      this.ellipses.push({ x, y, width, height });
+    },
     line() {},
     push() {},
     pop() {},
@@ -47,8 +54,8 @@ function createPainter() {
       this.rotations.push(angle);
     },
     rectMode() {},
-    rect(x, y, width, height) {
-      this.rectangles.push({ x, y, width, height });
+    rect(x, y, width, height, radius) {
+      this.rectangles.push({ x, y, width, height, radius });
     },
     textFont() {},
     textSize() {},
@@ -206,13 +213,28 @@ test("showJointNames turns the labels off", () => {
 });
 
 test("figure mode replaces the skeleton with the geometric body", () => {
-  render(makePose(), { figure: makeFigure() });
+  const view = render(makePose(), { figure: makeFigure() });
 
   // Chest plus four arm segments.
   assert.equal(painter.rectangles.length, 5);
   // Two shoulders, two elbows and the head.
   assert.equal(painter.circles.length, 5);
+  // Two black oval eyes.
+  assert.equal(painter.ellipses.length, 2);
   assert.deepEqual(labelValues(), []);
+
+  const scale = view.transform(painter).scale;
+  const rectangles = makeFigure()
+    .shapes(makePose())
+    .filter((shape) => shape.kind === "rectangle");
+
+  rectangles.forEach((shape, index) => {
+    approx(
+      painter.rectangles[index].radius,
+      shape.radius * scale,
+      "drawn corner radius"
+    );
+  });
 });
 
 test("showSkeleton draws the debug skeleton under the figure", () => {
@@ -224,20 +246,22 @@ test("showSkeleton draws the debug skeleton under the figure", () => {
   assert.ok(labelValues().includes("shoulder.L"));
 });
 
-test("mirroring reverses the rectangle rotation, and only then", () => {
-  const rectangles = makeFigure()
+test("mirroring reverses the rotation of rectangles and eyes, and only then", () => {
+  const rotated = makeFigure()
     .shapes(makePose())
-    .filter((shape) => shape.kind === "rectangle");
+    .filter(
+      (shape) => shape.kind === "rectangle" || shape.kind === "ellipse"
+    );
 
   render(makePose(), { figure: makeFigure() });
-  rectangles.forEach((shape, index) => {
+  rotated.forEach((shape, index) => {
     approx(painter.rotations[index], -shape.angle, "mirrored angle");
   });
 
   withConfig([[CONFIG.skeleton, "mirror", false]], () => {
     render(makePose(), { figure: makeFigure() });
   });
-  rectangles.forEach((shape, index) => {
+  rotated.forEach((shape, index) => {
     approx(painter.rotations[index], shape.angle, "plain angle");
   });
 });

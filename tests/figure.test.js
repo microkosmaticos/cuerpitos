@@ -25,7 +25,11 @@ function makePose(overrides = {}) {
   const points = { ...UPPER_BODY, ...overrides };
   const keypoints = Object.entries(points)
     .filter(([, point]) => point !== null)
-    .map(([name, point]) => ({ name, ...point, confidence: 0.95 }));
+    .map(([name, point]) => ({
+      name,
+      ...point,
+      confidence: point.confidence ?? 0.95,
+    }));
 
   const raw = { keypoints };
   for (const point of keypoints) raw[point.name] = point;
@@ -73,6 +77,7 @@ function parts(shapes) {
   return {
     rectangles,
     circles,
+    eyes: shapes.filter((shape) => shape.kind === "ellipse"),
     chest: rectangles[0],
     leftUpper: rectangles[1],
     leftForearm: rectangles[2],
@@ -139,12 +144,14 @@ test("a neutral body follows the detected joints", () => {
   approx(chest.y, 300, "chest y");
   approx(chest.length, 200, "chest length");
   approx(chest.thickness, 100, "chest thickness");
+  approx(chest.radius, 100 * CONFIG.figure.cornerRatio, "chest radius");
   approx(chest.angle, Math.PI / 2, "chest angle");
 
   approx(leftUpper.x, 255, "upper arm x");
   approx(leftUpper.y, 240, "upper arm y");
   approx(leftUpper.length, Math.hypot(30, 80), "upper arm length");
   approx(leftUpper.thickness, 17, "upper arm thickness");
+  approx(leftUpper.radius, 17 * CONFIG.figure.cornerRatio, "arm radius");
 
   approx(leftForearm.x, 230, "forearm x");
   approx(leftForearm.y, 315, "forearm y");
@@ -217,6 +224,176 @@ test("head size varies independently of the arms", () => {
   approx(small.leftUpper.length, big.leftUpper.length, "arm length");
 });
 
+test("eyes sit on the tracked eye keypoints", () => {
+  const shapes = makeFigure().shapes(makePose());
+  const { eyes } = parts(shapes);
+
+  assert.equal(eyes.length, 2);
+  approx(eyes[0].x, 310, "left eye x");
+  approx(eyes[0].y, 110, "left eye y");
+  approx(eyes[1].x, 330, "right eye x");
+  approx(eyes[0].rx, 20 * CONFIG.figure.ratios.eyeWidth, "eye rx");
+  approx(eyes[0].ry, 20 * CONFIG.figure.ratios.eyeHeight, "eye ry");
+  assert.ok(eyes[0].ry > eyes[0].rx, "eyes are vertically oval");
+  approx(eyes[0].angle, 0, "eye angle");
+  assert.equal(eyes[0].fill, "#000000");
+  assert.equal(shapes.at(-1).kind, "ellipse", "eyes are drawn last");
+});
+
+test("eyes tilt with the tracked eye axis", () => {
+  const { eyes } = parts(
+    makeFigure().shapes(
+      makePose({ left_eye: { x: 300, y: 100 }, right_eye: { x: 340, y: 120 } })
+    )
+  );
+
+  approx(eyes[0].angle, Math.atan2(20, 40), "eye axis angle");
+  approx(
+    eyes[0].rx,
+    Math.hypot(40, 20) * CONFIG.figure.ratios.eyeWidth,
+    "eye rx"
+  );
+});
+
+test("a single visible eye is still drawn", () => {
+  const { eyes } = parts(makeFigure().shapes(makePose({ right_eye: null })));
+
+  assert.equal(eyes.length, 1);
+  approx(eyes[0].x, 310, "eye x");
+
+  const headRadius = 100 * 0.3;
+  approx(
+    eyes[0].rx,
+    headRadius *
+      CONFIG.figure.ratios.eyeFallbackSeparation *
+      CONFIG.figure.ratios.eyeWidth,
+    "eye rx"
+  );
+  approx(eyes[0].angle, 0, "eye angle");
+});
+
+test("no tracked eyes means no ovals", () => {
+  const shapes = makeFigure().shapes(
+    makePose({ left_eye: null, right_eye: null })
+  );
+
+  assert.equal(shapes.filter((shape) => shape.kind === "ellipse").length, 0);
+});
+
+test("eyes scale with the body", () => {
+  const { eyes } = parts(makeFigure({ size: 1.5 }).shapes(makePose()));
+
+  approx(eyes[0].x, 320 + (310 - 320) * 1.5, "eye x");
+  approx(eyes[0].y, 200 + (110 - 200) * 1.5, "eye y");
+  approx(eyes[0].rx, 20 * CONFIG.figure.ratios.eyeWidth * 1.5, "eye rx");
+  approx(eyes[0].ry, 20 * CONFIG.figure.ratios.eyeHeight * 1.5, "eye ry");
+});
+
+test("a one-frame blink still closes and reopens", () => {
+  const figure = makeFigure();
+  const open = parts(figure.shapes(makePose(), 0)).eyes;
+  const openRy = open[0].ry;
+
+  // One frame without eye keypoints is enough to close the lid.
+  const blink = makePose({ left_eye: null, right_eye: null });
+  figure.shapes(blink, 16);
+
+  const closed = parts(figure.shapes(blink, 40)).eyes;
+  assert.ok(closed[0].ry < openRy * 0.5, "the lid closes fast");
+  approx(closed[0].x, open[0].x, "closed eye x");
+
+  // The keypoints come back after 50 ms, but the minimum blink keeps it shut.
+  const held = parts(figure.shapes(makePose(), 60)).eyes;
+  assert.ok(held[0].ry < openRy * 0.5, "short blinks still read");
+
+  let shapes;
+  for (let t = 76; t <= 420; t += 16) shapes = figure.shapes(makePose(), t);
+  assert.ok(parts(shapes).eyes[0].ry > openRy * 0.95, "the lid reopens");
+});
+
+test("a long closure stays closed while the keypoints are gone", () => {
+  const figure = makeFigure();
+  const openRy = parts(figure.shapes(makePose(), 0)).eyes[0].ry;
+
+  const blink = makePose({ left_eye: null, right_eye: null });
+  let shapes;
+  for (let t = 16; t <= 400; t += 16) shapes = figure.shapes(blink, t);
+  assert.ok(parts(shapes).eyes[0].ry < openRy * 0.2, "stays closed");
+
+  for (let t = 416; t <= 700; t += 16) shapes = figure.shapes(makePose(), t);
+  assert.ok(parts(shapes).eyes[0].ry > openRy * 0.9, "reopens");
+});
+
+test("a single lost eye does not blink the whole face", () => {
+  const figure = makeFigure();
+  const open = parts(figure.shapes(makePose(), 0)).eyes;
+  const openRy = open[0].ry;
+
+  let shapes;
+  for (let t = 16; t <= 200; t += 16) {
+    shapes = figure.shapes(makePose({ right_eye: null }), t);
+  }
+
+  const eyes = parts(shapes).eyes;
+  assert.equal(eyes.length, 2, "the lost eye keeps its last position");
+  const left = eyes.find((eye) => eye.x === 310);
+  const right = eyes.find((eye) => eye.x === 330);
+  assert.ok(left.ry > openRy * 0.9, "the visible eye stays open");
+  assert.ok(right.ry < openRy * 0.5, "the lost eye closes");
+});
+
+test("a confidence drop squints the eyes", () => {
+  const figure = makeFigure();
+  const openRy = parts(figure.shapes(makePose(), 0)).eyes[0].ry;
+
+  const squint = makePose({
+    left_eye: { x: 310, y: 110, confidence: 0.4 },
+    right_eye: { x: 330, y: 110, confidence: 0.4 },
+  });
+
+  let shapes;
+  for (let t = 16; t <= 400; t += 16) shapes = figure.shapes(squint, t);
+
+  const squinting = parts(shapes).eyes;
+  assert.equal(squinting.length, 2, "a squint keeps both eyes");
+  const ratio = squinting[0].ry / openRy;
+  assert.ok(ratio < 0.75, "the eye narrows");
+  assert.ok(ratio > 0.3, "the eye does not fully close");
+});
+
+test("eyes are forgotten after a long loss", () => {
+  const figure = makeFigure();
+  figure.shapes(makePose(), 0);
+
+  const blink = makePose({ left_eye: null, right_eye: null });
+  let shapes;
+  for (let t = 16; t <= 900; t += 16) shapes = figure.shapes(blink, t);
+
+  assert.equal(parts(shapes).eyes.length, 0);
+});
+
+test("rectangles have soft corners", () => {
+  const figures = [
+    makeFigure(),
+    makeFigure({ girth: 1.9, armLength: 1.35, size: 1.5 }),
+  ];
+
+  for (const figure of figures) {
+    const rectangles = figure
+      .shapes(makePose())
+      .filter((shape) => shape.kind === "rectangle");
+
+    for (const shape of rectangles) {
+      const halfShortSide = Math.min(shape.length, shape.thickness) / 2;
+      assert.ok(shape.radius > 0, "corner radius should be positive");
+      assert.ok(
+        shape.radius <= halfShortSide,
+        "corner radius should fit the short side"
+      );
+    }
+  }
+});
+
 test("size scales the whole body around the chest", () => {
   const { chest, leftUpper, leftShoulder, leftElbow, head } = parts(
     makeFigure({ size: 1.5 }).shapes(makePose())
@@ -227,11 +404,17 @@ test("size scales the whole body around the chest", () => {
   approx(chest.y, 350, "chest y");
   approx(chest.length, 300, "chest length");
   approx(chest.thickness, 150, "chest thickness");
+  approx(chest.radius, 150 * CONFIG.figure.cornerRatio, "chest radius");
 
   approx(leftUpper.x, 222.5, "upper arm x");
   approx(leftUpper.y, 260, "upper arm y");
   approx(leftUpper.length, Math.hypot(30, 80) * 1.5, "upper arm length");
   approx(leftUpper.thickness, 25.5, "upper arm thickness");
+  approx(
+    leftUpper.radius,
+    17 * CONFIG.figure.cornerRatio * 1.5,
+    "upper arm radius"
+  );
 
   approx(leftShoulder.x, 245, "shoulder x");
   approx(leftShoulder.radius, 19.5, "shoulder radius");

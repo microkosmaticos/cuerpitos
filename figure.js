@@ -73,6 +73,149 @@ export class FigureProportions {
   }
 }
 
+const EYE_SIDES = ["left", "right"];
+
+/**
+ * Eyelid state inferred from the eye keypoints.
+ *
+ * MoveNet tracks the eye centre, not the eyelids, so openness is derived from
+ * the only available signals: keypoint presence (lost -> blink) and keypoint
+ * confidence (drop -> squint). Both are smoothed over time, and the last
+ * position is kept briefly so a blink closes in place instead of popping out.
+ */
+class EyeExpression {
+  constructor() {
+    this.state = {
+      left: this.createState(),
+      right: this.createState(),
+    };
+    this.separation = null;
+    this.angle = 0;
+    this.updatedAt = null;
+  }
+
+  createState() {
+    return {
+      x: null,
+      y: null,
+      openness: 1,
+      lastSeenAt: null,
+      closedSince: null,
+    };
+  }
+
+  update(pose, now) {
+    const config = CONFIG.figure.eyes;
+    const minConfidence = CONFIG.skeleton.minConfidence;
+    const dt = this.deltaSeconds(now);
+    if (now != null) this.updatedAt = now;
+
+    const visible = { left: null, right: null };
+    const confidences = { left: 0, right: 0 };
+
+    for (const side of EYE_SIDES) {
+      const state = this.state[side];
+      const point = pose.get(`${side}_eye`);
+      const confidence = point ? point.confidence ?? 0 : 0;
+      confidences[side] = confidence;
+
+      const isVisible = Boolean(point) && confidence >= minConfidence;
+
+      if (isVisible) {
+        state.x = point.x;
+        state.y = point.y;
+        state.lastSeenAt = now ?? state.lastSeenAt;
+        visible[side] = point;
+      } else if (
+        now != null &&
+        state.lastSeenAt != null &&
+        now - state.lastSeenAt > config.forgetMs
+      ) {
+        state.x = null;
+        state.y = null;
+      }
+    }
+
+    if (visible.left && visible.right) {
+      const dx = visible.right.x - visible.left.x;
+      const dy = visible.right.y - visible.left.y;
+      this.separation = Math.hypot(dx, dy);
+      this.angle = Math.atan2(dy, dx);
+    }
+
+    for (const side of EYE_SIDES) {
+      const state = this.state[side];
+      const tracked = visible[side]
+        ? this.targetOpenness(confidences[side])
+        : 0;
+
+      // A very short loss still has to read as a blink: keep the lid closed
+      // until minBlinkMs has passed since it started closing.
+      const heldClosed =
+        now != null &&
+        state.closedSince != null &&
+        now - state.closedSince < config.minBlinkMs;
+
+      if (tracked === 0) {
+        if (now != null && state.closedSince == null) {
+          state.closedSince = now;
+        }
+      } else if (!heldClosed) {
+        state.closedSince = null;
+      }
+
+      const target = heldClosed ? 0 : tracked;
+      const tau =
+        target < state.openness ? config.closeTime : config.openTime;
+      state.openness = approach(state.openness, target, dt, tau);
+    }
+  }
+
+  deltaSeconds(now) {
+    if (now == null || this.updatedAt == null) return 0;
+    return Math.min(0.25, Math.max(0, (now - this.updatedAt) / 1000));
+  }
+
+  /** 1 when the eye is clearly visible, 0 when it is gone (target closed). */
+  targetOpenness(confidence) {
+    const { minOpenness, openConfidence } = CONFIG.figure.eyes;
+    const minConfidence = CONFIG.skeleton.minConfidence;
+    const range = Math.max(1e-6, openConfidence - minConfidence);
+    const t = Math.min(1, Math.max(0, (confidence - minConfidence) / range));
+
+    return minOpenness + (1 - minOpenness) * t;
+  }
+
+  shapes(headRadius) {
+    const ratios = CONFIG.figure.ratios;
+    const eyes = CONFIG.figure.eyes;
+    const separation =
+      this.separation ?? headRadius * ratios.eyeFallbackSeparation;
+    if (!(separation > 0)) return [];
+
+    const rx = separation * ratios.eyeWidth;
+    const openRy = separation * ratios.eyeHeight;
+
+    return EYE_SIDES.map((side) => this.state[side])
+      .filter((state) => state.x != null && state.y != null)
+      .map((state) =>
+        eyeAt(
+          { x: state.x, y: state.y },
+          rx,
+          openRy * Math.max(state.openness, eyes.closedHeight),
+          this.angle,
+          CONFIG.figure.eyeColor
+        )
+      );
+  }
+}
+
+function approach(current, target, dt, tau) {
+  if (!(dt > 0) || !(tau > 0)) return current;
+
+  return current + (target - current) * (1 - Math.exp(-dt / tau));
+}
+
 /**
  * Geometric body for one pose.
  *
@@ -80,6 +223,8 @@ export class FigureProportions {
  *   rectangle  between shoulder and elbow, and between elbow and wrist.
  *   rectangle  chest/torso, between the shoulder line and the hips.
  *   circle     head, plus one per shoulder and per elbow.
+ *   ellipse    two black oval eyes, driven by the eye keypoints: they blink
+ *              when a keypoint disappears and squint when its confidence drops.
  *
  * The elbow circle follows the stretched arm, so it always covers the bend
  * where the two rectangles meet.
@@ -94,9 +239,10 @@ export class FigureProportions {
 export class GeometricFigure {
   constructor(proportions) {
     this.proportions = proportions;
+    this.eyes = new EyeExpression();
   }
 
-  shapes(pose) {
+  shapes(pose, now = null) {
     if (!pose) return [];
 
     const base = Math.max(1, pose.scale || 1);
@@ -119,7 +265,11 @@ export class GeometricFigure {
     );
 
     const head = this.headShape(pose, base);
-    if (head) shapes.push(head);
+    if (head) {
+      shapes.push(head);
+      // Eyes only make sense on a head, and they ride on top of it.
+      shapes.push(...this.eyeShapes(pose, base, now));
+    }
 
     return this.scaleShapes(shapes, this.anchor(pose), this.proportions.size);
   }
@@ -149,9 +299,13 @@ export class GeometricFigure {
 
       if (shape.kind === "circle") {
         scaled.radius = shape.radius * size;
+      } else if (shape.kind === "ellipse") {
+        scaled.rx = shape.rx * size;
+        scaled.ry = shape.ry * size;
       } else {
         scaled.length = shape.length * size;
         scaled.thickness = shape.thickness * size;
+        scaled.radius = shape.radius * size;
       }
 
       return scaled;
@@ -186,6 +340,7 @@ export class GeometricFigure {
       y: chest.y + length / 2,
       length,
       thickness,
+      radius: cornerRadius(length, thickness),
       angle: Math.PI / 2,
     };
   }
@@ -259,6 +414,16 @@ export class GeometricFigure {
     return circleAt(center, base * this.proportions.headSize);
   }
 
+  /**
+   * Oval eyes driven by the eye tracking. `now` (milliseconds) advances the
+   * blink/squint animation; without it the eyes keep their current openness.
+   */
+  eyeShapes(pose, base, now) {
+    this.eyes.update(pose, now);
+
+    return this.eyes.shapes(base * this.proportions.headSize);
+  }
+
   visiblePoint(pose, name) {
     return pose.isVisible(name) ? pose.get(name) : null;
   }
@@ -292,10 +457,20 @@ function rectangleBetween(start, end, thickness) {
     y: (start.y + end.y) / 2,
     length,
     thickness,
+    radius: cornerRadius(length, thickness),
     angle: Math.atan2(dy, dx),
   };
 }
 
+/** Soft corners keep the rectangles in the same family as circles and ovals. */
+function cornerRadius(length, thickness) {
+  return Math.min(length, thickness) * CONFIG.figure.cornerRatio;
+}
+
 function circleAt(center, radius) {
   return { kind: "circle", x: center.x, y: center.y, radius };
+}
+
+function eyeAt(center, rx, ry, angle, fill) {
+  return { kind: "ellipse", x: center.x, y: center.y, rx, ry, angle, fill };
 }

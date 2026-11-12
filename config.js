@@ -91,6 +91,32 @@ export const CONFIG = {
     // Draw the tracking skeleton under the figure. Debug only.
     showSkeleton: false,
     strokeWeight: 2,
+    // Corner radius of the rectangles, as a fraction of their short side, so
+    // the body reads as soft as the circles and ovals.
+    cornerRatio: 0.35,
+    // Oval eyes, placed on the tracked eye keypoints.
+    eyeColor: "#000000",
+
+    // MoveNet has no eyelids, so openness is inferred from the eye keypoint:
+    // if it disappears the lid closes (blink), and a confidence drop narrows
+    // it (squint). Both are smoothed over time.
+    eyes: {
+      // Confidence at which the eye counts as fully open.
+      openConfidence: 0.55,
+      // Openness reached at the minimum confidence while the eye is tracked.
+      minOpenness: 0.25,
+      // Exponential time constants, in seconds. Fast close and quick reopen
+      // keep the lids faithful to the real blink.
+      closeTime: 0.03,
+      openTime: 0.09,
+      // A blink shorter than this still reads as a blink, in milliseconds.
+      minBlinkMs: 90,
+      // Keep the last position this long after the keypoint disappears, so a
+      // blink closes in place instead of popping out.
+      forgetMs: 700,
+      // A fully closed eye is a thin line at this fraction of its open height.
+      closedHeight: 0.08,
+    },
 
     // Rolled once per participant when it is locked, kept for the session.
     // A new participant is a new body.
@@ -115,6 +141,13 @@ export const CONFIG = {
       elbowRadius: 0.13,
       upperArmThickness: 0.17,
       forearmThickness: 0.14,
+      // Eye oval half-axes, as fractions of the tracked eye separation.
+      // Taller than wide: vertical ovals, a bit larger than the previous eyes.
+      eyeWidth: 0.2,
+      eyeHeight: 0.3,
+      // Eye separation fallback (fraction of head radius) when only one eye
+      // is visible and the distance between both cannot be measured.
+      eyeFallbackSeparation: 0.55,
     },
   },
 
