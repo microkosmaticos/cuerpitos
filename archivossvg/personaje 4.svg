@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1205.54 932.93">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #54c9b7;
+      }
+
+      .cls-2 {
+        fill: #000100;
+        stroke: #000;
+        stroke-miterlimit: 10;
+      }
+
+      .cls-3 {
+        fill: #8ce0ae;
+      }
+    </style>
+  </defs>
+  <g id="cabeza">
+    <circle class="cls-3" cx="595.16" cy="185.59" r="185.59"/>
+  </g>
+  <g id="ojos">
+    <ellipse class="cls-2" cx="523.96" cy="268.72" rx="17.22" ry="36.77"/>
+    <ellipse class="cls-2" cx="652.66" cy="267.38" rx="17.22" ry="36.77"/>
+  </g>
+  <g id="antebrazo">
+    <circle class="cls-1" cx="1132.85" cy="456.22" r="72.69"/>
+    <circle class="cls-1" cx="72.69" cy="449.62" r="72.69"/>
+  </g>
+  <g id="brazo">
+    <circle class="cls-3" cx="975.2" cy="543.27" r="107.43"/>
+    <circle class="cls-3" cx="230.35" cy="536.68" r="107.43"/>
+  </g>
+  <g id="torso">
+    <circle class="cls-1" cx="603.08" cy="652.45" r="280.48"/>
+  </g>
+</svg>
