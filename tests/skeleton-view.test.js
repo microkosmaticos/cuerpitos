@@ -126,7 +126,7 @@ function withConfig(changes, run) {
 }
 
 function render(pose, { figure = null } = {}) {
-  const view = new SkeletonView({});
+  const view = new SkeletonView({}, { environment: false });
   view.setVideoSize(640, 480);
   view.setConnections([[5, 7], [7, 9], [6, 8], [8, 10]]);
   view.setParticipants([{ slotId: 0, state: "LOCKED", pose, figure }]);

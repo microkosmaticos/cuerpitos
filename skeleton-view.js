@@ -1,4 +1,10 @@
 import { CONFIG } from "./config.js";
+import {
+  environmentPreload,
+  environmentSetup,
+  environmentDraw,
+  environmentResized,
+} from "./enviroment.js";
 import { RIG_HEAD_MARKERS, rigNameFor } from "./rig.js";
 
 /**
@@ -9,7 +15,7 @@ import { RIG_HEAD_MARKERS, rigNameFor } from "./rig.js";
  * Non-participants are ignored unless debug.showIgnored is enabled.
  */
 export class SkeletonView {
-  constructor(container) {
+  constructor(container, { environment = true } = {}) {
     if (typeof p5 === "undefined") {
       throw new Error(
         "p5 no está cargado. Revisá el <script> de p5 en index.html"
@@ -17,6 +23,7 @@ export class SkeletonView {
     }
 
     this.container = container;
+    this.environment = environment;
     this.participants = [];
     this.ignored = [];
     this.connections = [];
@@ -30,15 +37,32 @@ export class SkeletonView {
   }
 
   createSketch(p) {
+    // The environment owns the canvas: it paints the artwork as the sketch
+    // background and the figures are drawn on top of it, same canvas.
+    p.preload = () => {
+      if (this.environment) environmentPreload(p);
+    };
+
     p.setup = () => {
-      p.createCanvas(p.windowWidth, p.windowHeight);
+      if (this.environment) {
+        environmentSetup(p);
+      } else {
+        p.createCanvas(p.windowWidth, p.windowHeight);
+      }
       this.p = p;
     };
 
-    p.draw = () => this.render(p);
+    p.draw = () => {
+      if (this.environment) environmentDraw(p);
+      this.render(p);
+    };
 
     p.windowResized = () => {
-      p.resizeCanvas(p.windowWidth, p.windowHeight);
+      if (this.environment) {
+        environmentResized(p);
+      } else {
+        p.resizeCanvas(p.windowWidth, p.windowHeight);
+      }
     };
   }
 
@@ -111,8 +135,9 @@ export class SkeletonView {
   }
 
   render(p) {
-    // Transparent: the rescued environment paints behind this canvas.
-    p.clear();
+    // The environment paints the full background; without it, clear the
+    // canvas so frames do not trail.
+    if (!this.environment) p.clear();
 
     const transform = this.transform(p);
     if (!transform) return;

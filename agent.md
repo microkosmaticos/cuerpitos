@@ -83,6 +83,7 @@ Las interacciones tendrán reglas de compatibilidad para evitar acciones contrad
 
 ## 9. Entorno visual y sonido
 - La cámara web será el fondo inicial de la experiencia (se incorpora en la etapa de entorno visual; en la etapa de tracking la cámara permanece oculta y solo se dibuja el esqueleto).
+- El fondo de la instalación (`fondo-cuerpitos-01.svg`, `fondo-ondas.png`, `fondo-estrellas.png`, compuesto por `enviroment.js`) se dibuja como fondo del mismo canvas del sketch, debajo de las figuras.
 - Los organismos se dibujarán encima de la imagen de la cámara.
 - El fondo de cámara, cuando se incorpore, seguirá el mismo criterio de espejo que el esqueleto, para que la experiencia sea coherente.
 - Se podrá añadir una capa de color o transparencia para mejorar el contraste.
