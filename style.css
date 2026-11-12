@@ -108,3 +108,60 @@ h6 {
 #app {
   isolation: isolate;
 }
+
+/* ------------------------------------------------------------------
+   Stage 1: skeleton canvas + debug HUD
+   The canvas fills the viewport; the webcam is never painted.
+   ------------------------------------------------------------------ */
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#app canvas {
+  display: block;
+}
+
+#hud {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 10;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #9ff5ff;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  white-space: pre;
+}
+
+#hud[data-error="true"] {
+  color: #ff9a9a;
+}
+
+/* ------------------------------------------------------------------
+   Experiencia final: el video de la cámara vive en el DOM, detrás del
+   canvas transparente que dibuja los organismos y el HUD.
+   (Algunos navegadores dejan de decodificar un <video> oculto, por eso
+   el video se muestra de verdad.)
+   ------------------------------------------------------------------ */
+
+#camara-fondo {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 0;
+  background: #0b0b12;
+}
+
+.lienzo-experiencia {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background: transparent;
+}
