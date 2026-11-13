@@ -1,4 +1,9 @@
 import { CONFIG } from "./config.js";
+import {
+  ImpactState,
+  ReactionState,
+  punchPoints,
+} from "./reactions.js";
 
 /**
  * Generative geometric body.
@@ -342,6 +347,11 @@ function approach(current, target, dt, tau) {
  *   circle     head, plus one per shoulder, per elbow and per hand.
  *   ellipse    two black oval eyes on the tracked eye keypoints, with an
  *              autonomous blink every `autoBlinkMs`.
+ *   star       dizzy stars orbiting the head after a punch lands.
+ *
+ * A random reaction can replace one arm for its duration (see
+ * `reactions.js`): the punch draws a straight arm towards the companion
+ * instead of following the tracked arm.
  *
  * The elbow circle follows the stretched arm, so it always covers the bend
  * where the two rectangles meet.
@@ -354,27 +364,43 @@ function approach(current, target, dt, tau) {
  * drifting away from the person.
  */
 export class GeometricFigure {
-  constructor(proportions) {
+  constructor(proportions, { random = Math.random } = {}) {
     this.proportions = proportions;
     this.eyes = new EyeExpression();
+    this.reactions = new ReactionState({ random });
+    this.impact = new ImpactState();
   }
 
-  shapes(pose, now = null) {
+  shapes(pose, now = null, companion = null) {
     if (!pose) return [];
 
     const base = Math.max(1, pose.scale || 1);
     const shapes = [];
+    const companionPose = companion?.pose ?? companion;
 
     const chest = this.chestShape(pose, base);
     if (chest) shapes.push(chest);
 
-    const leftArm = this.armParts(pose, "left", base);
-    const rightArm = this.armParts(pose, "right", base);
+    // A reaction takes control of one limb for its duration. Everything else
+    // keeps following the tracked pose.
+    const reaction = this.reactions.update(
+      now,
+      pose,
+      companionPose,
+      this.proportions.armLength
+    );
+    const arms = {
+      left: this.armParts(pose, "left", base),
+      right: this.armParts(pose, "right", base),
+    };
+    if (reaction && reaction.kind === "punch") {
+      arms[reaction.side] = this.punchArm(base, reaction);
+    }
 
-    if (leftArm) shapes.push(...leftArm.segments);
-    if (rightArm) shapes.push(...rightArm.segments);
+    if (arms.left) shapes.push(...arms.left.segments);
+    if (arms.right) shapes.push(...arms.right.segments);
 
-    shapes.push(...this.jointShapes(pose, base, [leftArm, rightArm]));
+    shapes.push(...this.jointShapes(pose, base, [arms.left, arms.right]));
 
     const head = this.headShape(pose, base);
     if (head) {
@@ -385,7 +411,21 @@ export class GeometricFigure {
 
     shapes.push(...this.accessoryShapes(pose, base));
 
-    return this.scaleShapes(shapes, this.anchor(pose), this.proportions.size);
+    // A companion's punch can land on this body: knockback, dizzy sway and
+    // stars, applied before the figure scales so they stay proportional.
+    const reacted = this.withImpact(
+      shapes,
+      pose,
+      base,
+      now,
+      companion?.figure ?? null
+    );
+
+    return this.scaleShapes(
+      reacted,
+      this.anchor(pose),
+      this.proportions.size
+    );
   }
 
   /** Scaling anchor: the chest, or the torso centre when shoulders are hidden. */
@@ -416,6 +456,9 @@ export class GeometricFigure {
       } else if (shape.kind === "ellipse") {
         scaled.rx = shape.rx * size;
         scaled.ry = shape.ry * size;
+      } else if (shape.kind === "star") {
+        scaled.radius = shape.radius * size;
+        scaled.innerRadius = shape.innerRadius * size;
       } else {
         scaled.length = shape.length * size;
         scaled.thickness = shape.thickness * size;
@@ -504,6 +547,100 @@ export class GeometricFigure {
     return { segments, elbow: upperEnd, hand };
   }
 
+  /**
+   * Straight punching arm, aimed at the companion. The extension factor comes
+   * from the reaction: the arm grows from the shoulder, overshoots slightly
+   * and retracts. Elbow and fist travel along the same line.
+   */
+  punchArm(base, reaction) {
+    const extension = reaction.extension ?? 0;
+    if (extension < 0.02) {
+      return { segments: [], elbow: null, hand: null, reaction: "punch" };
+    }
+
+    const { girth } = this.proportions;
+    const { elbow, hand } = punchPoints(reaction, extension);
+
+    const segments = [
+      rectangleBetween(
+        reaction.shoulder,
+        elbow,
+        base * girth * CONFIG.figure.ratios.upperArmThickness
+      ),
+      rectangleBetween(
+        elbow,
+        hand,
+        base * girth * CONFIG.figure.ratios.forearmThickness
+      ),
+    ]
+      .filter(Boolean)
+      .map((shape) => ({ ...shape, reaction: "punch" }));
+
+    return { segments, elbow, hand, reaction: "punch" };
+  }
+
+  /**
+   * The fist of the active punch, as a circle in video coordinates. The
+   * companion uses it to test the hitbox against its own torso.
+   */
+  punchFist(now) {
+    const punch = this.reactions.fistAt(now);
+    if (!punch) return null;
+
+    return {
+      ...punch,
+      radius:
+        punch.base * this.proportions.girth * CONFIG.figure.ratios.handRadius,
+    };
+  }
+
+  /**
+   * Applies the receiving side of a hit: the whole figure is pushed away and
+   * sways, the eyes roll and stars orbit the head. Runs before `scaleShapes`
+   * so every offset grows with the body.
+   */
+  withImpact(shapes, pose, base, now, attacker) {
+    const impact = this.impact.update(now, pose, attacker);
+    if (!impact) return shapes;
+
+    const reacted = shapes.map((shape) => {
+      if (shape.kind !== "ellipse" || shape.fill !== CONFIG.figure.eyeColor) {
+        return shape;
+      }
+      return { ...shape, angle: (shape.angle ?? 0) + impact.eyeTilt };
+    });
+
+    const head = pose.headCenter();
+    if (head) reacted.push(...this.starShapes(head, base, impact.elapsed));
+
+    return reacted.map((shape) => ({
+      ...shape,
+      x: shape.x + impact.offset.x,
+      y: shape.y + impact.offset.y,
+    }));
+  }
+
+  /** Small stars spinning around the head while the figure is dizzy. */
+  starShapes(head, base, elapsed) {
+    const config = CONFIG.figure.impact.stars;
+    const headRadius = base * this.proportions.headSize;
+    const orbit = headRadius * config.orbit;
+    const spin = (elapsed / 1000) * config.spin;
+
+    return Array.from({ length: config.count }, (_, index) => {
+      const angle = spin + (index / config.count) * Math.PI * 2;
+
+      return starAt(
+        {
+          x: head.x + Math.cos(angle) * orbit,
+          y: head.y + Math.sin(angle) * orbit,
+        },
+        headRadius * config.size,
+        config.points
+      );
+    });
+  }
+
   /** Joints sit on top of the rectangles: shoulders, elbows and hands. */
   jointShapes(pose, base, arms) {
     const girth = this.proportions.girth;
@@ -519,9 +656,19 @@ export class GeometricFigure {
 
     for (const arm of arms) {
       if (!arm) continue;
-      shapes.push(circleAt(arm.elbow, elbowRadius));
+
+      if (arm.elbow) {
+        const elbow = circleAt(arm.elbow, elbowRadius);
+        shapes.push(
+          arm.reaction ? { ...elbow, reaction: arm.reaction } : elbow
+        );
+      }
+
       // The hand is the end of the stretched forearm, not a finger keypoint.
-      if (arm.hand) shapes.push(circleAt(arm.hand, handRadius));
+      if (arm.hand) {
+        const hand = circleAt(arm.hand, handRadius);
+        shapes.push(arm.reaction ? { ...hand, reaction: arm.reaction } : hand);
+      }
     }
 
     return shapes;
@@ -759,4 +906,17 @@ function offsetPoint(origin, axis, up, along, rise) {
 
 function eyeAt(center, rx, ry, angle, fill) {
   return { kind: "ellipse", x: center.x, y: center.y, rx, ry, angle, fill };
+}
+
+function starAt(center, radius, points) {
+  return {
+    kind: "star",
+    x: center.x,
+    y: center.y,
+    radius,
+    innerRadius: radius * 0.45,
+    points,
+    angle: 0,
+    accent: true,
+  };
 }

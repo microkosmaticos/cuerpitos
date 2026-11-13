@@ -132,6 +132,51 @@ export const CONFIG = {
     // One accessory is rolled at birth, one per figure.
     accessories: ["flower", "hat", "necklace"],
 
+    // Small random reactions each figure plays on its own. Every intervalMs
+    // the figure picks one reaction from the pool and loses control of one
+    // limb for its duration, then returns to following the tracked pose.
+    // Reactions need a companion to aim at: a figure alone never reacts.
+    reactions: {
+      enabled: true,
+      intervalMs: 10000,
+      pool: ["punch"],
+      punch: {
+        durationMs: 900,
+        // Segment lengths as fractions of the body scale, used when the
+        // punching arm keypoints are hidden at the moment of the punch.
+        upperFallback: 0.85,
+        forearmFallback: 0.73,
+      },
+    },
+
+    // The receiving side of a punch: a torso hitbox that detects the fist,
+    // then knockback, a dizzy sway, rolling eyes and stars around the head.
+    // Lengths are fractions of the body scale; star geometry is relative to
+    // the head radius.
+    impact: {
+      durationMs: 1800,
+      // Knockback push and return.
+      knockbackMs: 650,
+      knockback: 0.16,
+      // Dizzy sway, in body scales and radians per second.
+      sway: 0.05,
+      swaySpeed: 6,
+      // Rolling eyes.
+      eyeSpeed: 8,
+      eyeTilt: 0.35,
+      // Radius of the torso hitbox, as a fraction of the body scale.
+      hitboxRadius: 0.35,
+      stars: {
+        count: 4,
+        // Orbit and star size, as fractions of the head radius.
+        orbit: 1.3,
+        size: 0.24,
+        // Radians per second around the head.
+        spin: 2.6,
+        points: 5,
+      },
+    },
+
     // Rolled once per participant when it is locked, kept for the session.
     // A new participant is a new body.
     proportions: {

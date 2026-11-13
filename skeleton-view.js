@@ -169,10 +169,19 @@ export class SkeletonView {
       }
 
       if (CONFIG.figure.enabled && participant.figure) {
+        // The companion is only used by reactions that aim at the other body.
+        const companion = this.participants.find(
+          (other) =>
+            other !== participant &&
+            other.pose &&
+            other.state !== "ABSENT"
+        );
+
         this.drawFigure(
           p,
           participant.figure,
           participant.pose,
+          companion ?? null,
           transform,
           colors,
           alpha
@@ -185,8 +194,8 @@ export class SkeletonView {
    * Geometric body. Shapes arrive in video coordinates, so the same mirror and
    * cover transform used by the skeleton applies here.
    */
-  drawFigure(p, figure, pose, transform, colors, alpha) {
-    const shapes = figure.shapes(pose, p.millis());
+  drawFigure(p, figure, pose, companion, transform, colors, alpha) {
+    const shapes = figure.shapes(pose, p.millis(), companion);
     const scale = transform.scale;
 
     for (const shape of shapes) {
@@ -201,6 +210,18 @@ export class SkeletonView {
       if (shape.kind === "ellipse") {
         this.drawRotated(p, shape, center, () => {
           p.ellipse(0, 0, shape.rx * 2 * scale, shape.ry * 2 * scale);
+        });
+        continue;
+      }
+
+      if (shape.kind === "star") {
+        this.drawRotated(p, shape, center, () => {
+          this.drawStar(
+            p,
+            shape.radius * scale,
+            shape.innerRadius * scale,
+            shape.points
+          );
         });
         continue;
       }
@@ -243,6 +264,22 @@ export class SkeletonView {
     p.rotate(CONFIG.skeleton.mirror ? -shape.angle : shape.angle);
     draw();
     p.pop();
+  }
+
+  /**
+   * Star polygon. p5 has no `star()` primitive, so the alternating outer and
+   * inner vertices are emitted by hand.
+   */
+  drawStar(p, outerRadius, innerRadius, points) {
+    const step = Math.PI / points;
+
+    p.beginShape();
+    for (let index = 0; index < points * 2; index += 1) {
+      const radius = index % 2 === 0 ? outerRadius : innerRadius;
+      const angle = index * step - Math.PI / 2;
+      p.vertex(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    p.endShape(p.CLOSE);
   }
 
   drawPose(p, pose, transform, colors, alpha, drawHead) {

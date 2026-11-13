@@ -19,6 +19,7 @@ function createPainter() {
     RIGHT: "right",
     BOTTOM: "bottom",
     CENTER: "center",
+    CLOSE: "close",
     millis() {
       return 0;
     },
@@ -26,6 +27,8 @@ function createPainter() {
     circles: [],
     rectangles: [],
     ellipses: [],
+    starShapes: [],
+    currentShape: [],
     rotations: [],
     colorCalls: [],
     background() {},
@@ -46,6 +49,16 @@ function createPainter() {
     },
     ellipse(x, y, width, height) {
       this.ellipses.push({ x, y, width, height });
+    },
+    beginShape() {
+      this.currentShape = [];
+    },
+    vertex(x, y) {
+      this.currentShape.push({ x, y });
+    },
+    endShape(close) {
+      this.starShapes.push({ vertices: this.currentShape, close });
+      this.currentShape = [];
     },
     line() {},
     push() {},
@@ -254,6 +267,50 @@ test("the figure uses its own random palette", () => {
   assert.ok(painter.colorCalls.includes(palette.bone), "body colour used");
   assert.ok(painter.colorCalls.includes(palette.joint), "accent colour used");
   assert.ok(painter.colorCalls.includes(CONFIG.figure.eyeColor), "eyes stay black");
+});
+
+test("the view draws dizzy stars", () => {
+  const view = new SkeletonView({}, { environment: false });
+  view.setVideoSize(640, 480);
+
+  const transform = view.transform(painter);
+  const star = {
+    kind: "star",
+    x: 320,
+    y: 120,
+    radius: 10,
+    innerRadius: 4,
+    points: 5,
+    angle: 0,
+    accent: true,
+  };
+  const figure = { shapes: () => [star] };
+
+  view.drawFigure(
+    painter,
+    figure,
+    makePose(),
+    null,
+    transform,
+    { bone: "#ffffff", joint: "#000000" },
+    1
+  );
+
+  assert.equal(painter.starShapes.length, 1);
+
+  const drawn = painter.starShapes[0];
+  assert.equal(drawn.vertices.length, 10, "five points become ten vertices");
+  assert.equal(drawn.close, painter.CLOSE, "the star polygon closes");
+
+  const radii = drawn.vertices.map((vertex) =>
+    Math.hypot(vertex.x, vertex.y)
+  );
+  approx(Math.max(...radii), 10 * transform.scale, "star radius");
+  approx(
+    Math.min(...radii),
+    4 * transform.scale,
+    "star inner radius"
+  );
 });
 
 test("mirroring reverses the rotation of rectangles and eyes, and only then", () => {
