@@ -22,7 +22,7 @@ export class ReactionDirector {
    * Advances the schedule. Returns the active reaction, or null. Call once per
    * frame with the participants that are on stage.
    */
-  update(now, participants) {
+  update(now, participants, scene = null) {
     const config = CONFIG.figure.reactions;
     if (!config.enabled || now == null) {
       this.active = null;
@@ -53,11 +53,11 @@ export class ReactionDirector {
     if (now < this.nextAt) return null;
 
     this.nextAt = now + config.intervalMs;
-    this.active = this.start(now, ready);
+    this.active = this.start(now, ready, scene);
     return this.active;
   }
 
-  start(now, participants) {
+  start(now, participants, scene) {
     if (this.library.length === 0) return null;
 
     const index = Math.min(
@@ -68,6 +68,7 @@ export class ReactionDirector {
     const started = definition.start(now, {
       participants,
       random: this.random,
+      scene,
     });
     if (!started) return null;
 

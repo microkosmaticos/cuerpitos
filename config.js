@@ -146,22 +146,31 @@ export const CONFIG = {
         upperFallback: 0.85,
         forearmFallback: 0.73,
       },
-      // A heart pops up between both bodies and floats away: the pair is in
-      // love. Position is the midpoint of both chests; size and float are
-      // fractions of the average body scale. It inflates like a balloon and
-      // leaves a trail of smaller hearts behind.
+      // A heart pops up between both bodies and flies to the top edge of the
+      // page: the pair is in love. Position is the midpoint of both chests;
+      // size is a fraction of the average body scale. It inflates like a
+      // balloon and leaves a trail of smaller hearts behind.
       heart: {
         durationMs: 2800,
         size: 0.3,
-        float: 0.8,
+        // Particle trail: small hearts spawn behind the main heart while it
+        // flies, then drift and shrink during their short life.
         trail: {
-          count: 6,
-          // Size of the first trail heart, as a fraction of the main heart.
-          size: 0.42,
-          // Each older trail heart loses this fraction of the main size.
-          shrink: 0.05,
-          // Horizontal wobble of the trail, as a fraction of the body scale.
-          sway: 0.06,
+          spawnMs: 150,
+          lifeMs: 760,
+          // Fresh particle size, as a fraction of the main heart at spawn.
+          size: 0.28,
+          // Spawn point below the main heart centre, as a fraction of its
+          // size, so particles are not hidden inside the big heart.
+          behind: 0.95,
+          // Lateral spread and downward drift, as fractions of body scale.
+          spread: 0.18,
+          sink: 0.1,
+          // Rotation added over the particle's life, in radians.
+          spin: 0.6,
+          // Stop spawning early enough for every particle to die with the prop.
+          maxProgress: 0.7,
+          max: 24,
         },
       },
     },

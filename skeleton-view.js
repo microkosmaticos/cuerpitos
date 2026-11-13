@@ -9,46 +9,6 @@ import { RIG_HEAD_MARKERS, rigNameFor } from "./rig.js";
 import { ReactionDirector } from "./reactions/index.js";
 
 /**
- * Normalized heart outline from the classic parametric heart curve, centered
- * and fitted into a 2 x 2 box. The view scales it by the shape's `size`, so a
- * `size` of 20 is a heart 40 px wide.
- */
-const HEART_STEPS = 72;
-const HEART_POINTS = (() => {
-  const points = [];
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-
-  for (let index = 0; index < HEART_STEPS; index += 1) {
-    const t = (index / HEART_STEPS) * Math.PI * 2;
-    const x = 16 * Math.sin(t) ** 3;
-    const y = -(
-      13 * Math.cos(t) -
-      5 * Math.cos(2 * t) -
-      2 * Math.cos(3 * t) -
-      Math.cos(4 * t)
-    );
-
-    points.push({ x, y });
-    minX = Math.min(minX, x);
-    maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y);
-    maxY = Math.max(maxY, y);
-  }
-
-  const scale = 2 / Math.max(maxX - minX, maxY - minY);
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-
-  return points.map((point) => ({
-    x: (point.x - centerX) * scale,
-    y: (point.y - centerY) * scale,
-  }));
-})();
-
-/**
  * Skeleton renderer.
  *
  * Draws only the locked participants. Colour is keyed by slotId, so it stays
@@ -184,8 +144,11 @@ export class SkeletonView {
     if (!transform) return;
 
     const now = p.millis();
+    // The heart flies to the visible top edge of the page, so the director
+    // needs the page top expressed in video coordinates.
+    const ceiling = -transform.offsetY / transform.scale;
     // One scene-level director owns the single active reaction.
-    this.reactions.update(now, this.participants);
+    this.reactions.update(now, this.participants, { top: ceiling });
 
     if (CONFIG.participants.debug.showIgnored) {
       for (const pose of this.ignored) {
@@ -353,12 +316,46 @@ export class SkeletonView {
     p.endShape(p.CLOSE);
   }
 
-  /** Heart polygon from the parametric curve, scaled by `size`. */
+  /**
+   * Heart polygon with a rounded bottom tip. The bottom is a smooth joint:
+   * both sides reach it with a horizontal tangent, so it never becomes a
+   * spike and keeps the same soft vocabulary as the bodies.
+   */
   drawHeart(p, size) {
     p.beginShape();
-    for (const point of HEART_POINTS) {
-      p.vertex(point.x * size, point.y * size);
-    }
+    p.vertex(0, 0.95 * size);
+    p.bezierVertex(
+      -0.35 * size,
+      0.95 * size,
+      -1.05 * size,
+      0.25 * size,
+      -0.9 * size,
+      -0.4 * size
+    );
+    p.bezierVertex(
+      -0.8 * size,
+      -0.95 * size,
+      -0.2 * size,
+      -1 * size,
+      0,
+      -0.5 * size
+    );
+    p.bezierVertex(
+      0.2 * size,
+      -1 * size,
+      0.8 * size,
+      -0.95 * size,
+      0.9 * size,
+      -0.4 * size
+    );
+    p.bezierVertex(
+      1.05 * size,
+      0.25 * size,
+      0.35 * size,
+      0.95 * size,
+      0,
+      0.95 * size
+    );
     p.endShape(p.CLOSE);
   }
 

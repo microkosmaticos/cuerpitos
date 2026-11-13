@@ -89,14 +89,14 @@ function sequenceRandom(...values) {
 }
 
 /** A director that only knows one reaction, so the pick is deterministic. */
-function startReaction(id, participants, now = 0) {
+function startReaction(id, participants, now = 0, scene = null) {
   const definition = REACTION_LIBRARY.find((reaction) => reaction.id === id);
   const director = new ReactionDirector({
     random: sequenceRandom(0, 0, 0, 0),
     library: [definition],
   });
 
-  director.update(now, participants);
+  director.update(now, participants, scene);
   return director;
 }
 
@@ -410,9 +410,30 @@ test("a heart appears between both figures", () => {
 
   assert.ok(heart, "the heart appears");
   approx(heart.x, 420, "the heart is centred between both chests");
-  approx(heart.y, 160, "the heart floats up", 1e-4);
+  approx(heart.y, 100, "the heart is halfway to the top", 1e-4);
   assert.ok(heart.size > 0, "the heart has a size");
   assert.ok(props.colors, "the drawer palette is used");
+});
+
+test("the heart flies to the scene ceiling and disappears there", () => {
+  const participants = twoParticipants();
+  const director = startReaction("heart", participants, 0, { top: -40 });
+  const duration = CONFIG.figure.reactions.heart.durationMs;
+
+  const late = director
+    .props(duration * 0.95)
+    .shapes.find((shape) => shape.kind === "heart" && shape.main);
+
+  assert.ok(late, "the heart is still visible");
+  assert.ok(late.y < 0, "the heart reaches the top of the page");
+  assert.ok(late.size > 0, "it is still visible before the final shrink");
+
+  director.update(duration, participants);
+  assert.equal(
+    director.props(duration).shapes.length,
+    0,
+    "it disappears at the top"
+  );
 });
 
 test("the heart disappears after its reaction", () => {
@@ -431,7 +452,7 @@ test("the heart disappears after its reaction", () => {
   );
 });
 
-test("the flying heart leaves a trail of smaller hearts", () => {
+test("the flying heart leaves a particle trail of smaller hearts", () => {
   const participants = twoParticipants();
   const director = startReaction("heart", participants);
   const duration = CONFIG.figure.reactions.heart.durationMs;
@@ -442,11 +463,27 @@ test("the flying heart leaves a trail of smaller hearts", () => {
   const trail = hearts.filter((shape) => !shape.main);
 
   assert.ok(main, "the main heart is flying");
-  assert.ok(trail.length > 0, "trail hearts appear behind it");
+  assert.ok(trail.length > 0, "particles appear behind it");
   for (const heart of trail) {
-    assert.ok(heart.size < main.size, "trail hearts are smaller");
-    assert.ok(heart.y > main.y, "the trail stays below the flying heart");
+    assert.ok(heart.size < main.size, "particles are smaller");
+    assert.ok(heart.y >= main.y, "particles stay behind the main heart");
+    assert.ok(heart.y <= 200, "particles stay on the travelled path");
+    assert.ok(
+      heart.y > main.y + main.size * 0.6,
+      "particles emerge below the main heart silhouette"
+    );
   }
+
+  // The oldest particle is the lowest one and has faded the most.
+  const oldest = trail.reduce(
+    (lowest, heart) => (heart.y > lowest.y ? heart : lowest),
+    trail[0]
+  );
+  const newest = trail.reduce(
+    (highest, heart) => (heart.y < highest.y ? heart : highest),
+    trail[0]
+  );
+  assert.ok(oldest.size < newest.size, "particles shrink as they age");
 });
 
 test("the heart uses the drawer's palette", () => {

@@ -54,7 +54,10 @@ function createPainter() {
       this.currentShape = [];
     },
     vertex(x, y) {
-      this.currentShape.push({ x, y });
+      this.currentShape.push({ type: "vertex", x, y });
+    },
+    bezierVertex(cx1, cy1, cx2, cy2, x, y) {
+      this.currentShape.push({ type: "bezier", x, y, cx1, cy1, cx2, cy2 });
     },
     endShape(close) {
       this.polygons.push({ vertices: this.currentShape, close });
@@ -339,15 +342,30 @@ test("the view draws a heart", () => {
   assert.equal(painter.polygons.length, 1);
 
   const drawn = painter.polygons[0];
-  assert.ok(drawn.vertices.length > 20, "the heart is a smooth polygon");
-  assert.equal(drawn.close, painter.CLOSE, "the heart polygon closes");
-
-  const radii = drawn.vertices.map((vertex) =>
-    Math.hypot(vertex.x, vertex.y)
+  assert.equal(
+    drawn.vertices.length,
+    5,
+    "one start vertex plus four bezier segments"
   );
-  assert.ok(
-    Math.max(...radii) <= 20 * transform.scale * 1.5,
-    "the heart fits its size"
+  assert.equal(drawn.close, painter.CLOSE, "the heart path closes");
+
+  const start = drawn.vertices[0];
+  const first = drawn.vertices[1];
+  const last = drawn.vertices[drawn.vertices.length - 1];
+  const bottomY = 0.95 * 20 * transform.scale;
+
+  approx(start.y, bottomY, "the heart bottom is the start", 1e-6);
+  approx(
+    first.cy1,
+    bottomY,
+    "the bottom leaves with a horizontal tangent",
+    1e-6
+  );
+  approx(
+    last.cy2,
+    bottomY,
+    "the bottom closes with a horizontal tangent",
+    1e-6
   );
 });
 
@@ -371,9 +389,9 @@ test("mirroring reverses the rotation of rectangles and eyes, and only then", ()
   });
 });
 
-function approx(actual, expected, label) {
+function approx(actual, expected, label, tolerance = 1e-9) {
   assert.ok(
-    Math.abs(actual - expected) < 1e-9,
+    Math.abs(actual - expected) < tolerance,
     `${label}: expected ${expected}, got ${actual}`
   );
 }
