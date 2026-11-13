@@ -1,9 +1,6 @@
 import { CONFIG } from "./config.js";
-import {
-  ImpactState,
-  ReactionState,
-  punchPoints,
-} from "./reactions.js";
+import { ImpactState } from "./reactions/impact.js";
+import { punchReaction } from "./reactions/punch.js";
 
 /**
  * Generative geometric body.
@@ -348,9 +345,10 @@ function approach(current, target, dt, tau) {
  *   ellipse    two black oval eyes on the tracked eye keypoints, with an
  *              autonomous blink every `autoBlinkMs`.
  *   star       dizzy stars orbiting the head after a punch lands.
+ *   heart      a love heart between both bodies, from a reaction.
  *
  * A random reaction can replace one arm for its duration (see
- * `reactions.js`): the punch draws a straight arm towards the companion
+ * `reactions/punch.js`): the punch draws a straight arm towards the companion
  * instead of following the tracked arm.
  *
  * The elbow circle follows the stretched arm, so it always covers the bend
@@ -364,37 +362,36 @@ function approach(current, target, dt, tau) {
  * drifting away from the person.
  */
 export class GeometricFigure {
-  constructor(proportions, { random = Math.random } = {}) {
+  constructor(proportions) {
     this.proportions = proportions;
     this.eyes = new EyeExpression();
-    this.reactions = new ReactionState({ random });
     this.impact = new ImpactState();
+    // Assigned by the scene director every frame; only the punch has a body
+    // owner. Null means this figure follows the tracked pose.
+    this.reaction = null;
   }
 
-  shapes(pose, now = null, companion = null) {
+  shapes(pose, now = null, companion = null, reaction = null) {
     if (!pose) return [];
 
     const base = Math.max(1, pose.scale || 1);
     const shapes = [];
-    const companionPose = companion?.pose ?? companion;
+    this.reaction = reaction;
 
     const chest = this.chestShape(pose, base);
     if (chest) shapes.push(chest);
 
-    // A reaction takes control of one limb for its duration. Everything else
-    // keeps following the tracked pose.
-    const reaction = this.reactions.update(
-      now,
-      pose,
-      companionPose,
-      this.proportions.armLength
-    );
+    // A punch takes control of one arm for its duration. Everything else keeps
+    // following the tracked pose.
     const arms = {
       left: this.armParts(pose, "left", base),
       right: this.armParts(pose, "right", base),
     };
-    if (reaction && reaction.kind === "punch") {
-      arms[reaction.side] = this.punchArm(base, reaction);
+    if (reaction?.id === "punch") {
+      const points = punchReaction.pointsAt(now, reaction.state, pose);
+      arms[reaction.state.side] = points
+        ? this.punchArm(base, points)
+        : { segments: [], elbow: null, hand: null, reaction: "punch" };
     }
 
     if (arms.left) shapes.push(...arms.left.segments);
@@ -548,22 +545,15 @@ export class GeometricFigure {
   }
 
   /**
-   * Straight punching arm, aimed at the companion. The extension factor comes
-   * from the reaction: the arm grows from the shoulder, overshoots slightly
-   * and retracts. Elbow and fist travel along the same line.
+   * Straight punching arm, aimed at the companion. The punch library freezes
+   * the line; the elbow and fist travel along it and the whole arm retracts.
    */
-  punchArm(base, reaction) {
-    const extension = reaction.extension ?? 0;
-    if (extension < 0.02) {
-      return { segments: [], elbow: null, hand: null, reaction: "punch" };
-    }
-
+  punchArm(base, { shoulder, elbow, hand }) {
     const { girth } = this.proportions;
-    const { elbow, hand } = punchPoints(reaction, extension);
 
     const segments = [
       rectangleBetween(
-        reaction.shoulder,
+        shoulder,
         elbow,
         base * girth * CONFIG.figure.ratios.upperArmThickness
       ),
@@ -584,13 +574,16 @@ export class GeometricFigure {
    * companion uses it to test the hitbox against its own torso.
    */
   punchFist(now) {
-    const punch = this.reactions.fistAt(now);
-    if (!punch) return null;
+    const reaction = this.reaction;
+    if (!reaction || reaction.id !== "punch") return null;
+
+    const fist = punchReaction.fistAt(now, reaction.state);
+    if (!fist) return null;
 
     return {
-      ...punch,
+      ...fist,
       radius:
-        punch.base * this.proportions.girth * CONFIG.figure.ratios.handRadius,
+        fist.base * this.proportions.girth * CONFIG.figure.ratios.handRadius,
     };
   }
 

@@ -6,6 +6,47 @@ import {
   environmentResized,
 } from "./enviroment.js";
 import { RIG_HEAD_MARKERS, rigNameFor } from "./rig.js";
+import { ReactionDirector } from "./reactions/index.js";
+
+/**
+ * Normalized heart outline from the classic parametric heart curve, centered
+ * and fitted into a 2 x 2 box. The view scales it by the shape's `size`, so a
+ * `size` of 20 is a heart 40 px wide.
+ */
+const HEART_STEPS = 72;
+const HEART_POINTS = (() => {
+  const points = [];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (let index = 0; index < HEART_STEPS; index += 1) {
+    const t = (index / HEART_STEPS) * Math.PI * 2;
+    const x = 16 * Math.sin(t) ** 3;
+    const y = -(
+      13 * Math.cos(t) -
+      5 * Math.cos(2 * t) -
+      2 * Math.cos(3 * t) -
+      Math.cos(4 * t)
+    );
+
+    points.push({ x, y });
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+
+  const scale = 2 / Math.max(maxX - minX, maxY - minY);
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+
+  return points.map((point) => ({
+    x: (point.x - centerX) * scale,
+    y: (point.y - centerY) * scale,
+  }));
+})();
 
 /**
  * Skeleton renderer.
@@ -31,6 +72,8 @@ export class SkeletonView {
     this.videoHeight = 0;
     this.upperBody = new Set(CONFIG.skeleton.upperBody);
     this.headMarkers = new Set(RIG_HEAD_MARKERS);
+    // One director for the whole scene: at most one reaction at a time.
+    this.reactions = new ReactionDirector();
 
     new p5((p) => this.createSketch(p), container);
   }
@@ -140,6 +183,10 @@ export class SkeletonView {
     const transform = this.transform(p);
     if (!transform) return;
 
+    const now = p.millis();
+    // One scene-level director owns the single active reaction.
+    this.reactions.update(now, this.participants);
+
     if (CONFIG.participants.debug.showIgnored) {
       for (const pose of this.ignored) {
         this.drawPose(
@@ -182,11 +229,24 @@ export class SkeletonView {
           participant.figure,
           participant.pose,
           companion ?? null,
+          this.reactions.reactionFor(participant),
           transform,
           colors,
           alpha
         );
       }
+    }
+
+    // Scene props (the heart) are drawn over the bodies, outside their scale.
+    const props = this.reactions.props(now);
+    if (props.shapes.length > 0) {
+      this.drawShapes(
+        p,
+        props.shapes,
+        props.colors ?? CONFIG.skeleton.palette[0],
+        transform,
+        1
+      );
     }
   }
 
@@ -194,8 +254,12 @@ export class SkeletonView {
    * Geometric body. Shapes arrive in video coordinates, so the same mirror and
    * cover transform used by the skeleton applies here.
    */
-  drawFigure(p, figure, pose, companion, transform, colors, alpha) {
-    const shapes = figure.shapes(pose, p.millis(), companion);
+  drawFigure(p, figure, pose, companion, reaction, transform, colors, alpha) {
+    const shapes = figure.shapes(pose, p.millis(), companion, reaction);
+    this.drawShapes(p, shapes, colors, transform, alpha);
+  }
+
+  drawShapes(p, shapes, colors, transform, alpha) {
     const scale = transform.scale;
 
     for (const shape of shapes) {
@@ -222,6 +286,13 @@ export class SkeletonView {
             shape.innerRadius * scale,
             shape.points
           );
+        });
+        continue;
+      }
+
+      if (shape.kind === "heart") {
+        this.drawRotated(p, shape, center, () => {
+          this.drawHeart(p, shape.size * scale);
         });
         continue;
       }
@@ -278,6 +349,15 @@ export class SkeletonView {
       const radius = index % 2 === 0 ? outerRadius : innerRadius;
       const angle = index * step - Math.PI / 2;
       p.vertex(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    p.endShape(p.CLOSE);
+  }
+
+  /** Heart polygon from the parametric curve, scaled by `size`. */
+  drawHeart(p, size) {
+    p.beginShape();
+    for (const point of HEART_POINTS) {
+      p.vertex(point.x * size, point.y * size);
     }
     p.endShape(p.CLOSE);
   }

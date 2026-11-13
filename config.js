@@ -132,20 +132,37 @@ export const CONFIG = {
     // One accessory is rolled at birth, one per figure.
     accessories: ["flower", "hat", "necklace"],
 
-    // Small random reactions each figure plays on its own. Every intervalMs
-    // the figure picks one reaction from the pool and loses control of one
-    // limb for its duration, then returns to following the tracked pose.
-    // Reactions need a companion to aim at: a figure alone never reacts.
+    // Small reactions played by one scene-level director. Every intervalMs it
+    // picks ONE reaction from the reaction library (reactions/library.js) and
+    // plays it; there is never more than one at a time. Reactions need both
+    // participants on stage.
     reactions: {
       enabled: true,
       intervalMs: 10000,
-      pool: ["punch"],
       punch: {
         durationMs: 900,
         // Segment lengths as fractions of the body scale, used when the
         // punching arm keypoints are hidden at the moment of the punch.
         upperFallback: 0.85,
         forearmFallback: 0.73,
+      },
+      // A heart pops up between both bodies and floats away: the pair is in
+      // love. Position is the midpoint of both chests; size and float are
+      // fractions of the average body scale. It inflates like a balloon and
+      // leaves a trail of smaller hearts behind.
+      heart: {
+        durationMs: 2800,
+        size: 0.3,
+        float: 0.8,
+        trail: {
+          count: 6,
+          // Size of the first trail heart, as a fraction of the main heart.
+          size: 0.42,
+          // Each older trail heart loses this fraction of the main size.
+          shrink: 0.05,
+          // Horizontal wobble of the trail, as a fraction of the body scale.
+          sway: 0.06,
+        },
       },
     },
 

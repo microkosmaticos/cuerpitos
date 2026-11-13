@@ -27,7 +27,7 @@ function createPainter() {
     circles: [],
     rectangles: [],
     ellipses: [],
-    starShapes: [],
+    polygons: [],
     currentShape: [],
     rotations: [],
     colorCalls: [],
@@ -57,7 +57,7 @@ function createPainter() {
       this.currentShape.push({ x, y });
     },
     endShape(close) {
-      this.starShapes.push({ vertices: this.currentShape, close });
+      this.polygons.push({ vertices: this.currentShape, close });
       this.currentShape = [];
     },
     line() {},
@@ -291,14 +291,15 @@ test("the view draws dizzy stars", () => {
     figure,
     makePose(),
     null,
+    null,
     transform,
     { bone: "#ffffff", joint: "#000000" },
     1
   );
 
-  assert.equal(painter.starShapes.length, 1);
+  assert.equal(painter.polygons.length, 1);
 
-  const drawn = painter.starShapes[0];
+  const drawn = painter.polygons[0];
   assert.equal(drawn.vertices.length, 10, "five points become ten vertices");
   assert.equal(drawn.close, painter.CLOSE, "the star polygon closes");
 
@@ -310,6 +311,43 @@ test("the view draws dizzy stars", () => {
     Math.min(...radii),
     4 * transform.scale,
     "star inner radius"
+  );
+});
+
+test("the view draws a heart", () => {
+  const view = new SkeletonView({}, { environment: false });
+  view.setVideoSize(640, 480);
+
+  const transform = view.transform(painter);
+  const heart = {
+    kind: "heart",
+    x: 320,
+    y: 120,
+    size: 20,
+    angle: 0,
+    accent: true,
+  };
+
+  view.drawShapes(
+    painter,
+    [heart],
+    { bone: "#ffffff", joint: "#000000" },
+    transform,
+    1
+  );
+
+  assert.equal(painter.polygons.length, 1);
+
+  const drawn = painter.polygons[0];
+  assert.ok(drawn.vertices.length > 20, "the heart is a smooth polygon");
+  assert.equal(drawn.close, painter.CLOSE, "the heart polygon closes");
+
+  const radii = drawn.vertices.map((vertex) =>
+    Math.hypot(vertex.x, vertex.y)
+  );
+  assert.ok(
+    Math.max(...radii) <= 20 * transform.scale * 1.5,
+    "the heart fits its size"
   );
 });
 
