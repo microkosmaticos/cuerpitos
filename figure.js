@@ -649,7 +649,11 @@ export class GeometricFigure {
       .map((shape) => ({ ...shape, accent: true }));
   }
 
-  /** An oval band over the chest with a small pendant. */
+  /**
+   * A half circle of small pearls over the chest: the two ends rest at chest
+   * level and the middle pearl closes the arc at the bottom, like a string of
+   * pearls.
+   */
   necklaceShapes(pose, base) {
     const left = this.visiblePoint(pose, "left_shoulder");
     const right = this.visiblePoint(pose, "right_shoulder");
@@ -657,23 +661,39 @@ export class GeometricFigure {
 
     const chest = midpoint(left, right);
     const angle = Math.atan2(right.y - left.y, right.x - left.x);
+    const axis = { x: Math.cos(angle), y: Math.sin(angle) };
     // The shoulder line is a line too: force "down" towards the bottom of the
-    // image so the band and pendant sit over the chest, never on the neck.
-    let down = { x: -Math.sin(angle), y: Math.cos(angle) };
+    // image so the arc sits over the chest, never on the neck.
+    let down = { x: -axis.y, y: axis.x };
     if (down.y < 0) down = { x: -down.x, y: -down.y };
-    const bandCenter = {
-      x: chest.x + down.x * base * 0.09,
-      y: chest.y + down.y * base * 0.09,
-    };
-    const pendantCenter = {
-      x: chest.x + down.x * base * 0.2,
-      y: chest.y + down.y * base * 0.2,
-    };
 
-    return [
-      ellipseAt(bandCenter, base * 0.27, base * 0.055, angle, true),
-      circleAt(pendantCenter, base * 0.045, true, CONFIG.figure.eyeColor),
-    ];
+    const center = {
+      x: chest.x + down.x * base * 0.05,
+      y: chest.y + down.y * base * 0.05,
+    };
+    const arcRadius = base * 0.24;
+    const pearlRadius = base * 0.035;
+    const pearls = 11;
+
+    return Array.from({ length: pearls }, (_, index) => {
+      // 0 and PI are the ends of the diameter; PI / 2 is the bottom pearl.
+      const step = (index / (pearls - 1)) * Math.PI;
+
+      return circleAt(
+        {
+          x:
+            center.x +
+            axis.x * Math.cos(step) * arcRadius +
+            down.x * Math.sin(step) * arcRadius,
+          y:
+            center.y +
+            axis.y * Math.cos(step) * arcRadius +
+            down.y * Math.sin(step) * arcRadius,
+        },
+        pearlRadius,
+        true
+      );
+    });
   }
 
   visiblePoint(pose, name) {
@@ -728,10 +748,6 @@ function circleAt(center, radius, accent = false, fill = null) {
     accent,
     ...(fill ? { fill } : {}),
   };
-}
-
-function ellipseAt(center, rx, ry, angle, accent = false) {
-  return { kind: "ellipse", x: center.x, y: center.y, rx, ry, angle, accent };
 }
 
 function offsetPoint(origin, axis, up, along, rise) {

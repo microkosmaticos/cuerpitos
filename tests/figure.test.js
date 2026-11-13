@@ -518,16 +518,21 @@ test("a hat sits on top of the head", () => {
   }
 });
 
-test("a necklace sits over the chest", () => {
+test("a pearl necklace arcs over the chest", () => {
   const shapes = makeFigure({ accessory: "necklace" }).shapes(makePose());
   const necklace = shapes.filter((shape) => shape.accent);
 
-  assert.equal(necklace.length, 2);
-  assert.equal(necklace[0].kind, "ellipse");
-  assert.equal(necklace[1].kind, "circle");
-  approx(necklace[0].x, 320, "band x");
-  approx(necklace[0].y, 209, "band y");
-  approx(necklace[1].y, 220, "pendant y");
+  assert.equal(necklace.length, 11);
+  for (const pearl of necklace) assert.equal(pearl.kind, "circle");
+
+  // The two ends sit at chest level and the middle pearl closes the half
+  // circle at the bottom of the arc.
+  approx(necklace[0].x, 344, "right end x");
+  approx(necklace[0].y, 205, "right end y");
+  approx(necklace[5].x, 320, "middle x");
+  approx(necklace[5].y, 229, "middle y");
+  approx(necklace[10].x, 296, "left end x");
+  approx(necklace[10].y, 205, "left end y");
 });
 
 test("the accessory scales with the body", () => {
@@ -572,9 +577,9 @@ test("the necklace stays below the chest when shoulder labels are mirrored", () 
     .shapes(swappedShoulders)
     .filter((shape) => shape.accent);
 
-  assert.equal(necklace.length, 2);
-  for (const piece of necklace) {
-    assert.ok(piece.y > 200, "necklace stays over the chest");
+  assert.equal(necklace.length, 11);
+  for (const pearl of necklace) {
+    assert.ok(pearl.y > 200, "necklace stays over the chest");
   }
 });
 
