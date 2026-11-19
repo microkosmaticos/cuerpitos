@@ -226,6 +226,11 @@ export class SkeletonView {
     const scale = transform.scale;
 
     for (const shape of shapes) {
+      if (shape.kind === "stream") {
+        this.drawStream(p, shape, transform, colors, alpha);
+        continue;
+      }
+
       const center = this.project(shape, transform);
       this.styleShape(p, shape, colors, alpha);
 
@@ -357,6 +362,19 @@ export class SkeletonView {
       0.95 * size
     );
     p.endShape(p.CLOSE);
+  }
+
+  /** A single wavy tear stream, drawn as a thick open polyline. */
+  drawStream(p, shape, transform, colors, alpha) {
+    p.noFill();
+    p.stroke(this.withAlpha(p, shape.stroke ?? colors.joint, alpha));
+    p.strokeWeight(shape.width * transform.scale);
+    p.beginShape();
+    for (const point of shape.points) {
+      const projected = this.project(point, transform);
+      p.vertex(projected.x, projected.y);
+    }
+    p.endShape();
   }
 
   drawPose(p, pose, transform, colors, alpha, drawHead) {

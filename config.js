@@ -173,6 +173,37 @@ export const CONFIG = {
           max: 24,
         },
       },
+      // One figure cries: tears spawn at its eyes, fall with gravity and
+      // shrink. Sizes and distances are fractions of the body scale.
+      cry: {
+        durationMs: 5200,
+        spawnMs: 90,
+        lifeMs: 1200,
+        // Tear half-width, as a fraction of the body scale.
+        size: 0.09,
+        // Downward motion: a constant speed plus gravity, as fractions of the
+        // body scale over the tear's life.
+        speed: 0.25,
+        fall: 0.6,
+        // Lateral drift, as a fraction of body scale.
+        drift: 0.14,
+        // After this delay the drops become one continuous wavy stream.
+        streamAfterMs: 1500,
+        stream: {
+          // Stream length, wave amplitude and stroke width, as fractions of
+          // the body scale.
+          length: 1,
+          amplitude: 0.16,
+          width: 0.07,
+          // Wave shape: cycles along the stream and travel speed (rad/s).
+          cycles: 2.5,
+          speed: 6,
+          points: 24,
+        },
+        // Stop spawning early enough for every tear to die with the reaction.
+        maxProgress: 0.72,
+        max: 48,
+      },
     },
 
     // The receiving side of a punch: a torso hitbox that detects the fist,

@@ -1,4 +1,5 @@
 import { CONFIG } from "./config.js";
+import { variation } from "./reactions/geometry.js";
 import { ImpactState } from "./reactions/impact.js";
 import { punchReaction } from "./reactions/punch.js";
 
@@ -408,6 +409,10 @@ export class GeometricFigure {
 
     shapes.push(...this.accessoryShapes(pose, base));
 
+    if (reaction?.id === "cry" && head) {
+      shapes.push(...this.tearShapes(base, now, reaction.state));
+    }
+
     // A companion's punch can land on this body: knockback, dizzy sway and
     // stars, applied before the figure scales so they stay proportional.
     const reacted = this.withImpact(
@@ -442,6 +447,17 @@ export class GeometricFigure {
     if (!Number.isFinite(size) || size === 1) return shapes;
 
     return shapes.map((shape) => {
+      if (shape.kind === "stream") {
+        return {
+          ...shape,
+          points: shape.points.map((point) => ({
+            x: anchor.x + (point.x - anchor.x) * size,
+            y: anchor.y + (point.y - anchor.y) * size,
+          })),
+          width: shape.width * size,
+        };
+      }
+
       const scaled = {
         ...shape,
         x: anchor.x + (shape.x - anchor.x) * size,
@@ -584,6 +600,118 @@ export class GeometricFigure {
       ...fist,
       radius:
         fist.base * this.proportions.girth * CONFIG.figure.ratios.handRadius,
+    };
+  }
+
+  /**
+   * Tears from the eyes for the cry reaction. Each tear is a small vertical
+   * ellipse that spawns at a visible eye, falls with gravity and shrinks. The
+   * system is derived from the clock, so it keeps no particle state.
+   */
+  tearShapes(base, now, state) {
+    const config = CONFIG.figure.reactions.cry;
+    const elapsed = now - state.startedAt;
+    const progress = elapsed / config.durationMs;
+    if (!(progress >= 0) || progress >= 1) return [];
+
+    const eyeHeight =
+      base * this.proportions.headSize * CONFIG.figure.ratios.eyeHeight;
+    const eyes = [this.eyes.state.left, this.eyes.state.right].filter(
+      (eye) => eye.x != null && eye.y != null
+    );
+    if (eyes.length === 0) return [];
+
+    const first = Math.max(
+      0,
+      Math.ceil((elapsed - config.lifeMs) / config.spawnMs)
+    );
+    const last = Math.floor(elapsed / config.spawnMs);
+    const tears = [];
+
+    for (let index = first; index <= last; index += 1) {
+      if (tears.length >= config.max) break;
+      if (index * config.spawnMs > config.streamAfterMs) continue;
+
+      const spawnProgress = (index * config.spawnMs) / config.durationMs;
+      if (spawnProgress > config.maxProgress) continue;
+
+      const age = elapsed - index * config.spawnMs;
+      if (age < 0 || age >= config.lifeMs) continue;
+
+      const eye = eyes[index % eyes.length];
+      const life = age / config.lifeMs;
+      const fall = base * (config.speed * life + config.fall * life * life);
+      const drift =
+        (variation(index, 1) - 0.5) * config.drift * base * (0.4 + life);
+
+      tears.push(
+        tearAt(
+          {
+            x: eye.x + drift,
+            y: eye.y + eyeHeight * 0.8 + fall,
+          },
+          config.size * base * 0.55 * (1 - life),
+          config.size * base * 1.4 * (1 - life)
+        )
+      );
+    }
+
+    if (elapsed >= config.streamAfterMs) {
+      eyes.forEach((eye, index) => {
+        const stream = this.streamShape(
+          base,
+          eye,
+          elapsed,
+          config,
+          index
+        );
+        if (stream) tears.push(stream);
+      });
+    }
+
+    return tears;
+  }
+
+  /**
+   * One continuous wavy stream of tears from a single eye. It grows from the
+   * eye and undulates as it falls, then disappears with the reaction instead
+   * of retracting. Each eye gets its own phase so both streams are not a
+   * rigid copy.
+   */
+  streamShape(base, eye, elapsed, config, seed = 0) {
+    const stream = config.stream;
+    const grow = Math.min(
+      1,
+      Math.max(0, (elapsed - config.streamAfterMs) / 350)
+    );
+    const length = stream.length * base * grow;
+    if (length <= 0) return null;
+
+    const eyeHeight =
+      base * this.proportions.headSize * CONFIG.figure.ratios.eyeHeight;
+    const startY = eye.y + eyeHeight * 0.8;
+    const waveTime = (elapsed / 1000) * stream.speed + seed * Math.PI;
+    const points = [];
+
+    for (let index = 0; index <= stream.points; index += 1) {
+      const t = index / stream.points;
+      points.push({
+        x:
+          eye.x +
+          Math.sin(t * stream.cycles * Math.PI * 2 - waveTime) *
+            stream.amplitude *
+            base *
+            t,
+        y: startY + t * length,
+      });
+    }
+
+    return {
+      kind: "stream",
+      points,
+      width: stream.width * base,
+      stroke: this.proportions.palette.joint,
+      reaction: "cry",
     };
   }
 
@@ -911,5 +1039,18 @@ function starAt(center, radius, points) {
     points,
     angle: 0,
     accent: true,
+  };
+}
+
+function tearAt(center, rx, ry) {
+  return {
+    kind: "ellipse",
+    x: center.x,
+    y: center.y,
+    rx,
+    ry,
+    angle: 0,
+    accent: true,
+    reaction: "cry",
   };
 }

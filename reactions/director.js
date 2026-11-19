@@ -83,16 +83,16 @@ export class ReactionDirector {
   }
 
   /**
-   * The reaction a figure must render. Only the punch has a body owner; the
-   * heart is a scene prop, so it returns null for every figure. Participants
-   * are recreated every frame, so the owner is matched by its stable slot.
+   * The reaction a figure must render. Body reactions (punch, cry) declare an
+   * `owner`; scene props (heart) return null. Participants are recreated every
+   * frame, so the owner is matched by its stable slot.
    */
   reactionFor(participant) {
-    if (!this.active || this.active.id !== "punch") return null;
-    if (this.active.attacker?.slotId == null || participant?.slotId == null) {
+    if (!this.active || !this.active.owner) return null;
+    if (this.active.owner.slotId == null || participant?.slotId == null) {
       return null;
     }
-    return this.active.attacker.slotId === participant.slotId
+    return this.active.owner.slotId === participant.slotId
       ? this.active
       : null;
   }

@@ -49,6 +49,15 @@ const TARGET = {
   right_eye: { x: 540, y: 110 },
 };
 
+/** A crier with eyes to shed tears from. */
+const CRYING = {
+  ...SELF,
+  left_ear: { x: 290, y: 115 },
+  right_ear: { x: 350, y: 115 },
+  left_eye: { x: 305, y: 110 },
+  right_eye: { x: 335, y: 110 },
+};
+
 /** A victim far out of the attacker's reach. */
 const FAR_TARGET = {
   ...TARGET,
@@ -132,7 +141,7 @@ function twoParticipants() {
 test("the reaction library exposes one module per reaction", () => {
   assert.deepEqual(
     REACTION_LIBRARY.map((reaction) => reaction.id),
-    ["punch", "heart"]
+    ["punch", "heart", "cry"]
   );
 });
 
@@ -497,4 +506,138 @@ test("the heart uses the drawer's palette", () => {
 
   assert.equal(props.colors.bone, palette.bone);
   assert.equal(props.colors.joint, palette.joint);
+});
+
+test("a crying figure starts with drops and turns into a wavy stream", () => {
+  const crier = participant(makePose(CRYING), makeFigure(), "ACTIVE", 0);
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const participants = [crier, companion];
+  const director = startReaction("cry", participants);
+  const reaction = director.reactionFor(crier);
+  const duration = CONFIG.figure.reactions.cry.durationMs;
+
+  assert.equal(reaction?.id, "cry");
+  assert.equal(director.reactionFor(companion), null);
+  assert.deepEqual(
+    director.props(duration * 0.5).shapes,
+    [],
+    "the cry draws no scene prop"
+  );
+
+  // First phase: drops only.
+  const early = crier.figure.shapes(
+    crier.pose,
+    duration * 0.1,
+    companion,
+    reaction
+  );
+  const earlyDrops = early.filter(
+    (shape) => shape.kind === "ellipse" && shape.reaction === "cry"
+  );
+  assert.ok(earlyDrops.length > 0, "the cry starts with drops");
+  assert.equal(
+    early.find((shape) => shape.kind === "stream"),
+    undefined,
+    "no stream yet"
+  );
+
+  // Later: the drops become one wavy line per visible eye.
+  const later = crier.figure.shapes(
+    crier.pose,
+    duration * 0.45,
+    companion,
+    reaction
+  );
+  const streams = later.filter((shape) => shape.kind === "stream");
+
+  assert.equal(streams.length, 2, "one stream per visible eye");
+  for (const stream of streams) {
+    assert.ok(stream.points.length > 10, "the stream is a smooth polyline");
+  }
+
+  const starts = streams
+    .map((stream) => stream.points[0].x)
+    .sort((a, b) => a - b);
+  approx(starts[0], 305, "the left stream starts at the left eye");
+  approx(starts[1], 335, "the right stream starts at the right eye");
+
+  const xs = streams[0].points.map((point) => point.x);
+  assert.ok(
+    Math.max(...xs) - Math.min(...xs) > 1,
+    "the stream undulates sideways"
+  );
+  const ys = streams[0].points.map((point) => point.y);
+  assert.ok(ys[ys.length - 1] > ys[0], "the stream falls downward");
+
+  // It disappears with the reaction instead of retracting.
+  const late = crier.figure.shapes(
+    crier.pose,
+    duration * 0.95,
+    companion,
+    reaction
+  );
+  const lateStreams = late.filter((shape) => shape.kind === "stream");
+  assert.equal(lateStreams.length, 2, "the streams last until the end");
+  const lateYs = lateStreams[0].points.map((point) => point.y);
+  approx(
+    lateYs[lateYs.length - 1] - lateYs[0],
+    CONFIG.figure.reactions.cry.stream.length * 100,
+    "the stream keeps its full length until it disappears"
+  );
+
+  const stopped = crier.figure.shapes(
+    crier.pose,
+    duration,
+    companion,
+    reaction
+  );
+  assert.equal(
+    stopped.filter((shape) => shape.reaction === "cry").length,
+    0,
+    "tears stop with the reaction"
+  );
+});
+
+test("a cry needs a visible eye", () => {
+  const participants = twoParticipants();
+  const director = startReaction("cry", participants);
+
+  assert.equal(director.active, null);
+});
+
+test("the tear stream scales with the body size", () => {
+  const crier = participant(
+    makePose(CRYING),
+    makeFigure({ size: 1.5 }),
+    "ACTIVE",
+    0
+  );
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const director = startReaction("cry", [crier, companion]);
+  const reaction = director.reactionFor(crier);
+  const duration = CONFIG.figure.reactions.cry.durationMs;
+
+  const shapes = crier.figure.shapes(
+    crier.pose,
+    duration * 0.5,
+    companion,
+    reaction
+  );
+  const stream = shapes.find((shape) => shape.kind === "stream");
+  const anchor = { x: 320, y: 200 };
+
+  assert.ok(stream, "the stream exists");
+  // The first point sits at the eye (305, ...), scaled around the chest.
+  approx(
+    stream.points[0].x,
+    anchor.x + (305 - anchor.x) * 1.5,
+    "stream start x scales with the body",
+    1e-6
+  );
+  approx(
+    stream.width,
+    CONFIG.figure.reactions.cry.stream.width * 100 * 1.5,
+    "stream width scales with the body",
+    1e-6
+  );
 });

@@ -45,7 +45,7 @@ export const punchReaction = {
       : null;
 
     return {
-      attacker,
+      owner: attacker,
       state: {
         startedAt: now,
         side,

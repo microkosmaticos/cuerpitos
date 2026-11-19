@@ -369,6 +369,35 @@ test("the view draws a heart", () => {
   );
 });
 
+test("the view draws a wavy tear stream", () => {
+  const view = new SkeletonView({}, { environment: false });
+  view.setVideoSize(640, 480);
+
+  const transform = view.transform(painter);
+  const stream = {
+    kind: "stream",
+    points: [
+      { x: 320, y: 120 },
+      { x: 330, y: 140 },
+      { x: 320, y: 160 },
+    ],
+    width: 4,
+    stroke: "#000000",
+    reaction: "cry",
+  };
+
+  view.drawShapes(
+    painter,
+    [stream],
+    { bone: "#ffffff", joint: "#000000" },
+    transform,
+    1
+  );
+
+  assert.equal(painter.polygons.length, 1);
+  assert.equal(painter.polygons[0].vertices.length, 3);
+});
+
 test("mirroring reverses the rotation of rectangles and eyes, and only then", () => {
   const rotated = makeFigure()
     .shapes(makePose())

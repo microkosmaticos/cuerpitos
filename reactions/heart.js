@@ -1,5 +1,5 @@
 import { CONFIG } from "../config.js";
-import { chestOf, midpoint } from "./geometry.js";
+import { chestOf, midpoint, variation } from "./geometry.js";
 
 /**
  * Heart reaction library.
@@ -170,10 +170,4 @@ function particlesAt(now, state, dy) {
   }
 
   return particles;
-}
-
-/** Deterministic 0..1 noise so particles vary without storing state. */
-function variation(index, salt) {
-  const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453;
-  return value - Math.floor(value);
 }

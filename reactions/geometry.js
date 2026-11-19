@@ -32,3 +32,9 @@ export function normalize(x, y) {
 export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
+
+/** Deterministic 0..1 noise so particles vary without storing state. */
+export function variation(index, salt) {
+  const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
