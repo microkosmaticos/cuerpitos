@@ -104,7 +104,6 @@ h6 {
   overflow-wrap: break-word;
 }
 
-#root,
 #app {
   isolation: isolate;
 }

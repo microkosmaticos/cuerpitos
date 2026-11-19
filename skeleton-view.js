@@ -1,4 +1,12 @@
 import { CONFIG } from "./config.js";
+import {
+  environmentPreload,
+  environmentSetup,
+  environmentDraw,
+  environmentResized,
+} from "./enviroment.js";
+import { RIG_HEAD_MARKERS, rigNameFor } from "./rig.js";
+import { ReactionDirector } from "./reactions/index.js";
 
 /**
  * Skeleton renderer.
@@ -8,7 +16,7 @@ import { CONFIG } from "./config.js";
  * Non-participants are ignored unless debug.showIgnored is enabled.
  */
 export class SkeletonView {
-  constructor(container) {
+  constructor(container, { environment = true } = {}) {
     if (typeof p5 === "undefined") {
       throw new Error(
         "p5 no está cargado. Revisá el <script> de p5 en index.html"
@@ -16,27 +24,46 @@ export class SkeletonView {
     }
 
     this.container = container;
+    this.environment = environment;
     this.participants = [];
     this.ignored = [];
     this.connections = [];
     this.videoWidth = 0;
     this.videoHeight = 0;
     this.upperBody = new Set(CONFIG.skeleton.upperBody);
-    this.p = null;
+    this.headMarkers = new Set(RIG_HEAD_MARKERS);
+    // One director for the whole scene: at most one reaction at a time.
+    this.reactions = new ReactionDirector();
 
     new p5((p) => this.createSketch(p), container);
   }
 
   createSketch(p) {
-    p.setup = () => {
-      p.createCanvas(p.windowWidth, p.windowHeight);
-      this.p = p;
+    // The environment owns the canvas: it paints the artwork as the sketch
+    // background and the figures are drawn on top of it, same canvas.
+    p.preload = () => {
+      if (this.environment) environmentPreload(p);
     };
 
-    p.draw = () => this.render(p);
+    p.setup = () => {
+      if (this.environment) {
+        environmentSetup(p);
+      } else {
+        p.createCanvas(p.windowWidth, p.windowHeight);
+      }
+    };
+
+    p.draw = () => {
+      if (this.environment) environmentDraw(p);
+      this.render(p);
+    };
 
     p.windowResized = () => {
-      p.resizeCanvas(p.windowWidth, p.windowHeight);
+      if (this.environment) {
+        environmentResized(p);
+      } else {
+        p.resizeCanvas(p.windowWidth, p.windowHeight);
+      }
     };
   }
 
@@ -109,10 +136,19 @@ export class SkeletonView {
   }
 
   render(p) {
-    p.background(0);
+    // The environment paints the full background; without it, clear the
+    // canvas so frames do not trail.
+    if (!this.environment) p.clear();
 
     const transform = this.transform(p);
     if (!transform) return;
+
+    const now = p.millis();
+    // The heart flies to the visible top edge of the page, so the director
+    // needs the page top expressed in video coordinates.
+    const ceiling = -transform.offsetY / transform.scale;
+    // One scene-level director owns the single active reaction.
+    this.reactions.update(now, this.participants, { top: ceiling });
 
     if (CONFIG.participants.debug.showIgnored) {
       for (const pose of this.ignored) {
@@ -132,11 +168,262 @@ export class SkeletonView {
       if (participant.state === "ABSENT") continue;
 
       const palette = CONFIG.skeleton.palette;
-      const colors = palette[participant.slotId % palette.length];
+      const colors =
+        participant.figure?.proportions?.palette ??
+        palette[participant.slotId % palette.length];
       const alpha = participant.state === "LOST" ? 0.4 : 1;
 
-      this.drawPose(p, participant.pose, transform, colors, alpha, true);
+      // The skeleton is a debug layer: it sits under the geometric body.
+      if (CONFIG.figure.showSkeleton || !CONFIG.figure.enabled) {
+        this.drawPose(p, participant.pose, transform, colors, alpha, true);
+      }
+
+      if (CONFIG.figure.enabled && participant.figure) {
+        // The companion is only used by reactions that aim at the other body.
+        const companion = this.participants.find(
+          (other) =>
+            other !== participant &&
+            other.pose &&
+            other.state !== "ABSENT"
+        );
+
+        this.drawFigure(
+          p,
+          participant.figure,
+          participant.pose,
+          companion ?? null,
+          this.reactions.reactionFor(participant),
+          transform,
+          colors,
+          alpha
+        );
+      }
     }
+
+    // Scene props (the heart) are drawn over the bodies, outside their scale.
+    const props = this.reactions.props(now);
+    if (props.shapes.length > 0) {
+      this.drawShapes(
+        p,
+        props.shapes,
+        props.colors ?? CONFIG.skeleton.palette[0],
+        transform,
+        1
+      );
+    }
+  }
+
+  /**
+   * Geometric body. Shapes arrive in video coordinates, so the same mirror and
+   * cover transform used by the skeleton applies here.
+   */
+  drawFigure(p, figure, pose, companion, reaction, transform, colors, alpha) {
+    const shapes = figure.shapes(pose, p.millis(), companion, reaction);
+    this.drawShapes(p, shapes, colors, transform, alpha);
+  }
+
+  drawShapes(p, shapes, colors, transform, alpha) {
+    const scale = transform.scale;
+
+    for (const shape of shapes) {
+      if (shape.kind === "stream") {
+        this.drawStream(p, shape, transform, colors, alpha);
+        continue;
+      }
+
+      if (shape.kind === "puff") {
+        this.drawPuff(p, shape, transform, alpha);
+        continue;
+      }
+
+      const center = this.project(shape, transform);
+      this.styleShape(p, shape, colors, alpha);
+
+      if (shape.kind === "circle") {
+        p.circle(center.x, center.y, shape.radius * 2 * scale);
+        continue;
+      }
+
+      if (shape.kind === "ellipse") {
+        this.drawRotated(p, shape, center, () => {
+          p.ellipse(0, 0, shape.rx * 2 * scale, shape.ry * 2 * scale);
+        });
+        continue;
+      }
+
+      if (shape.kind === "star") {
+        this.drawRotated(p, shape, center, () => {
+          this.drawStar(
+            p,
+            shape.radius * scale,
+            shape.innerRadius * scale,
+            shape.points
+          );
+        });
+        continue;
+      }
+
+      if (shape.kind === "heart") {
+        this.drawRotated(p, shape, center, () => {
+          this.drawHeart(p, shape.size * scale);
+        });
+        continue;
+      }
+
+      if (shape.kind !== "rectangle") continue;
+
+      this.drawRotated(p, shape, center, () => {
+        p.rectMode(p.CENTER);
+        p.rect(
+          0,
+          0,
+          shape.length * scale,
+          shape.thickness * scale,
+          shape.radius * scale
+        );
+      });
+    }
+  }
+
+  /** A shape can override the palette, e.g. the black oval eyes. */
+  styleShape(p, shape, colors, alpha) {
+    if (shape.fill) {
+      p.noStroke();
+      p.fill(this.withAlpha(p, shape.fill, alpha));
+      return;
+    }
+
+    const fill = shape.accent ? colors.joint : colors.bone;
+    const stroke = shape.accent ? colors.bone : colors.joint;
+    p.stroke(this.withAlpha(p, stroke, alpha));
+    p.strokeWeight(CONFIG.figure.strokeWeight);
+    p.fill(this.withAlpha(p, fill, alpha));
+  }
+
+  /** Rotated shapes need the mirror-aware angle. */
+  drawRotated(p, shape, center, draw) {
+    p.push();
+    p.translate(center.x, center.y);
+    // Mirroring flips x, which reverses the rotation direction.
+    p.rotate(CONFIG.skeleton.mirror ? -shape.angle : shape.angle);
+    draw();
+    p.pop();
+  }
+
+  /**
+   * Star polygon. p5 has no `star()` primitive, so the alternating outer and
+   * inner vertices are emitted by hand.
+   */
+  drawStar(p, outerRadius, innerRadius, points) {
+    const step = Math.PI / points;
+
+    p.beginShape();
+    for (let index = 0; index < points * 2; index += 1) {
+      const radius = index % 2 === 0 ? outerRadius : innerRadius;
+      const angle = index * step - Math.PI / 2;
+      p.vertex(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    p.endShape(p.CLOSE);
+  }
+
+  /**
+   * Heart polygon with a rounded bottom tip. The bottom is a smooth joint:
+   * both sides reach it with a horizontal tangent, so it never becomes a
+   * spike and keeps the same soft vocabulary as the bodies.
+   */
+  drawHeart(p, size) {
+    p.beginShape();
+    p.vertex(0, 0.95 * size);
+    p.bezierVertex(
+      -0.35 * size,
+      0.95 * size,
+      -1.05 * size,
+      0.25 * size,
+      -0.9 * size,
+      -0.4 * size
+    );
+    p.bezierVertex(
+      -0.8 * size,
+      -0.95 * size,
+      -0.2 * size,
+      -1 * size,
+      0,
+      -0.5 * size
+    );
+    p.bezierVertex(
+      0.2 * size,
+      -1 * size,
+      0.8 * size,
+      -0.95 * size,
+      0.9 * size,
+      -0.4 * size
+    );
+    p.bezierVertex(
+      1.05 * size,
+      0.25 * size,
+      0.35 * size,
+      0.95 * size,
+      0,
+      0.95 * size
+    );
+    p.endShape(p.CLOSE);
+  }
+
+  /** A single wavy tear stream, drawn as a thick open polyline. */
+  drawStream(p, shape, transform, colors, alpha) {
+    p.noFill();
+    p.stroke(this.withAlpha(p, shape.stroke ?? colors.joint, alpha));
+    p.strokeWeight(shape.width * transform.scale);
+    p.beginShape();
+    for (const point of shape.points) {
+      const projected = this.project(point, transform);
+      p.vertex(projected.x, projected.y);
+    }
+    p.endShape();
+  }
+
+  /**
+   * Soft smoke puff: a radial gradient that is dense in the centre and fades
+   * to fully transparent at the edge, so the smoke never reads as a bubble.
+   */
+  drawPuff(p, shape, transform, alpha) {
+    const center = this.project(shape, transform);
+    const radius = shape.radius * transform.scale;
+    if (radius <= 0) return;
+
+    const opacity = Math.max(0, Math.min(1, alpha * (shape.opacity ?? 1)));
+    const context = p.drawingContext;
+
+    if (context && typeof context.createRadialGradient === "function") {
+      const gradient = context.createRadialGradient(
+        center.x,
+        center.y,
+        0,
+        center.x,
+        center.y,
+        radius
+      );
+      gradient.addColorStop(0, this.rgba(shape.color, opacity));
+      gradient.addColorStop(0.55, this.rgba(shape.color, opacity * 0.5));
+      gradient.addColorStop(1, this.rgba(shape.color, 0));
+      context.fillStyle = gradient;
+      context.beginPath();
+      context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+      context.fill();
+      return;
+    }
+
+    // Fallback for a non-2D canvas: a translucent circle.
+    p.noStroke();
+    p.fill(this.withAlpha(p, shape.color, opacity));
+    p.circle(center.x, center.y, radius * 2);
+  }
+
+  rgba(hex, alpha) {
+    const red = parseInt(hex.slice(1, 3), 16);
+    const green = parseInt(hex.slice(3, 5), 16);
+    const blue = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
   }
 
   drawPose(p, pose, transform, colors, alpha, drawHead) {
@@ -182,6 +469,67 @@ export class SkeletonView {
       const projected = this.project(point, transform);
       p.circle(projected.x, projected.y, keypointRadius * 2);
     }
+
+    if (CONFIG.skeleton.showJointNames) {
+      this.drawJointNames(p, pose, transform, colors, alpha);
+    }
+  }
+
+  /**
+   * Writes the rig name of every visible joint. Head markers are skipped:
+   * they build the head, they do not articulate. `chest`, `pelvis` and `head`
+   * are synthetic joints, so they are labelled from their own geometry.
+   */
+  drawJointNames(p, pose, transform, colors, alpha) {
+    const { minConfidence } = CONFIG.skeleton;
+
+    p.textFont("monospace");
+    p.textSize(CONFIG.skeleton.jointLabelSize);
+    p.fill(this.withAlpha(p, colors.joint, alpha));
+
+    for (const name of CONFIG.skeleton.upperBody) {
+      if (this.headMarkers.has(name)) continue;
+
+      const point = pose.get(name);
+      if (!point) continue;
+      if ((point.confidence ?? 0) < minConfidence) continue;
+
+      this.drawJointName(p, rigNameFor(name), this.project(point, transform));
+    }
+
+    const leftShoulder = this.visiblePoint(pose, "left_shoulder");
+    const rightShoulder = this.visiblePoint(pose, "right_shoulder");
+    if (leftShoulder && rightShoulder) {
+      const chest = this.midpoint(leftShoulder, rightShoulder);
+      this.drawJointName(p, "chest", this.project(chest, transform));
+    }
+
+    const leftHip = this.visiblePoint(pose, "left_hip");
+    const rightHip = this.visiblePoint(pose, "right_hip");
+    if (leftHip && rightHip) {
+      const pelvis = this.midpoint(leftHip, rightHip);
+      this.drawJointName(p, "pelvis", this.project(pelvis, transform));
+    }
+
+    const head = pose.headCenter();
+    if (head) {
+      this.drawJointName(p, "head", this.project(head, transform));
+    }
+  }
+
+  /** Labels flip toward the canvas centre so they never leave the frame. */
+  drawJointName(p, name, projected) {
+    if (!name) return;
+
+    const offset = CONFIG.skeleton.jointLabelOffset;
+    const alignRight = projected.x + offset + p.textWidth(name) > p.width;
+
+    p.textAlign(alignRight ? p.RIGHT : p.LEFT, p.BOTTOM);
+    p.text(
+      name,
+      projected.x + (alignRight ? -offset : offset),
+      projected.y - offset
+    );
   }
 
   /**
@@ -196,13 +544,10 @@ export class SkeletonView {
     const rightEar = this.visiblePoint(pose, "right_ear");
     const leftEye = this.visiblePoint(pose, "left_eye");
     const rightEye = this.visiblePoint(pose, "right_eye");
-    const nose = this.visiblePoint(pose, "nose");
     const leftShoulder = this.visiblePoint(pose, "left_shoulder");
     const rightShoulder = this.visiblePoint(pose, "right_shoulder");
 
-    const ears = leftEar && rightEar ? this.midpoint(leftEar, rightEar) : null;
-    const eyes = leftEye && rightEye ? this.midpoint(leftEye, rightEye) : null;
-    const center = ears ?? eyes ?? nose;
+    const center = pose.headCenter();
     if (!center) return;
 
     const shoulderCenter =

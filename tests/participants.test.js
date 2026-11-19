@@ -8,6 +8,7 @@ import {
 } from "../participants.js";
 import { Pose } from "../pose.js";
 import { CONFIG } from "../config.js";
+import { GeometricFigure } from "../figure.js";
 
 // Fast, deterministic timings for the state machine.
 const config = {
@@ -356,4 +357,98 @@ test("7. releases both slots after both participants leave and allows a new sess
   for (const id of newIds) {
     assert.ok(!oldIds.includes(id));
   }
+});
+
+test("8. rolls a stable geometric figure per participant", () => {
+  const tracker = makeTracker();
+  const { now: lockedAt, result: locked } = lockTwo(tracker);
+
+  for (const participant of locked.participants) {
+    assert.ok(participant.figure instanceof GeometricFigure);
+  }
+  assert.notDeepEqual(
+    locked.participants[0].figure.proportions,
+    locked.participants[1].figure.proportions
+  );
+
+  const second = locked.participants.find(
+    (participant) => participant.trackId === 2
+  );
+
+  let now = lockedAt;
+  let result;
+  for (let i = 0; i < 3; i += 1) {
+    now += 100;
+    result = tracker.update([makePose({ id: 1, x: 200 })], now);
+  }
+
+  const lost = result.participants.find(
+    (participant) => participant.slotId === second.slotId
+  );
+
+  assert.equal(lost.state, ParticipantState.LOST);
+  assert.equal(lost.figure, second.figure);
+});
+
+test("9. never more than two figures, and a present participant keeps their body", () => {
+  const tracker = makeTracker();
+  const { now: lockedAt, result: locked } = lockTwo(tracker);
+  const first = locked.participants.find(
+    (participant) => participant.trackId === 1
+  );
+
+  const now = lockedAt + 100;
+  const result = tracker.update(
+    [
+      makePose({ id: 1, x: 200 }),
+      makePose({ id: 2, x: 440 }),
+      makePose({ id: 3, x: 560, y: 120, scale: 60, score: 0.99 }),
+    ],
+    now
+  );
+
+  assert.equal(result.participants.length, CONFIG.participants.maxActive);
+  assert.ok(
+    result.participants.every(
+      (participant) => participant.figure instanceof GeometricFigure
+    )
+  );
+
+  const same = result.participants.find(
+    (participant) => participant.participantId === first.participantId
+  );
+  assert.equal(same.figure, first.figure);
+});
+
+test("10. after the session ends, new people get brand-new bodies", () => {
+  const tracker = makeTracker();
+  const { now: lockedAt, result: locked } = lockTwo(tracker);
+  const oldFigures = locked.participants.map((participant) => participant.figure);
+
+  let now = lockedAt;
+  for (let i = 0; i < 12; i += 1) {
+    now += 100;
+    tracker.update([], now);
+  }
+  now += 100;
+  tracker.update([], now);
+
+  let result;
+  for (let i = 0; i < 6; i += 1) {
+    now += 100;
+    result = tracker.update(
+      [makePose({ id: 44, x: 180 }), makePose({ id: 45, x: 460 })],
+      now
+    );
+  }
+
+  assert.equal(result.participants.length, 2);
+  for (const participant of result.participants) {
+    assert.ok(participant.figure instanceof GeometricFigure);
+    assert.ok(!oldFigures.includes(participant.figure));
+  }
+  assert.notDeepEqual(
+    result.participants[0].figure.proportions,
+    result.participants[1].figure.proportions
+  );
 });

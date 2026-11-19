@@ -1,4 +1,5 @@
 import { CONFIG } from "./config.js";
+import { FigureProportions, GeometricFigure } from "./figure.js";
 
 export const ParticipantState = Object.freeze({
   EMPTY: "EMPTY",
@@ -58,6 +59,8 @@ export class ParticipantTracker {
       firstSeenAt: null,
       lastSeenAt: null,
       lostSince: null,
+      // Geometric body rolled at lock time. Null until the slot is taken.
+      figure: null,
     };
   }
 
@@ -455,6 +458,9 @@ export class ParticipantTracker {
 
     slot.state = ParticipantState.ACTIVE;
     slot.participantId = `p${this.nextParticipantId}`;
+    // A new participant is a new organism: roll its body once, keep it for
+    // the whole session, including LOST and ABSENT.
+    slot.figure = new GeometricFigure(FigureProportions.random());
     slot.trackId = candidate.trackId;
     slot.pose = candidate.pose;
     slot.center = { ...candidate.center };
@@ -497,6 +503,7 @@ export class ParticipantTracker {
       box: slot.box,
       lastSeenAt: slot.lastSeenAt,
       lostSince: slot.lostSince,
+      figure: slot.figure,
     };
   }
 }

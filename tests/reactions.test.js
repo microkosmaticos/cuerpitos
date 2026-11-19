@@ -1,0 +1,739 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import { CONFIG } from "../config.js";
+import { FigureProportions, GeometricFigure } from "../figure.js";
+import {
+  ReactionDirector,
+  REACTION_LIBRARY,
+  fistTouchesBody,
+} from "../reactions/index.js";
+import { Pose } from "../pose.js";
+
+function makePose(points) {
+  const keypoints = Object.entries(points)
+    .filter(([, point]) => point !== null)
+    .map(([name, point]) => ({ name, ...point, confidence: 0.95 }));
+
+  const raw = { keypoints };
+  for (const point of keypoints) raw[point.name] = point;
+
+  return new Pose(raw);
+}
+
+const SELF = {
+  left_shoulder: { x: 270, y: 200 },
+  right_shoulder: { x: 370, y: 200 },
+  left_elbow: { x: 240, y: 280 },
+  right_elbow: { x: 400, y: 280 },
+  left_wrist: { x: 220, y: 350 },
+  right_wrist: { x: 420, y: 350 },
+};
+
+const COMPANION_RIGHT = {
+  left_shoulder: { x: 470, y: 200 },
+  right_shoulder: { x: 570, y: 200 },
+};
+
+const COMPANION_LEFT = {
+  left_shoulder: { x: 70, y: 200 },
+  right_shoulder: { x: 170, y: 200 },
+};
+
+/** A reachable victim with a head, so the dizzy stars have an anchor. */
+const TARGET = {
+  ...COMPANION_RIGHT,
+  left_ear: { x: 485, y: 115 },
+  right_ear: { x: 555, y: 115 },
+  left_eye: { x: 500, y: 110 },
+  right_eye: { x: 540, y: 110 },
+};
+
+/** A crier with eyes to shed tears from. */
+const CRYING = {
+  ...SELF,
+  left_ear: { x: 290, y: 115 },
+  right_ear: { x: 350, y: 115 },
+  left_eye: { x: 305, y: 110 },
+  right_eye: { x: 335, y: 110 },
+};
+
+/** A victim far out of the attacker's reach. */
+const FAR_TARGET = {
+  ...TARGET,
+  left_shoulder: { x: 870, y: 200 },
+  right_shoulder: { x: 970, y: 200 },
+  left_ear: { x: 885, y: 115 },
+  right_ear: { x: 955, y: 115 },
+  left_eye: { x: 900, y: 110 },
+  right_eye: { x: 940, y: 110 },
+};
+
+function makeFigure(proportions = {}) {
+  return new GeometricFigure(
+    new FigureProportions({
+      seed: 1,
+      girth: 1,
+      armLength: 1,
+      headSize: 0.3,
+      size: 1,
+      accessory: null,
+      ...proportions,
+    })
+  );
+}
+
+function participant(pose, figure, state = "ACTIVE", slotId = 0) {
+  return { slotId, participantId: `p${slotId + 1}`, pose, figure, state };
+}
+
+/** A random source that returns fixed values in order, then the last one. */
+function sequenceRandom(...values) {
+  let index = 0;
+  return () => {
+    const value = values[Math.min(index, values.length - 1)];
+    index += 1;
+    return value;
+  };
+}
+
+/** A director that only knows one reaction, so the pick is deterministic. */
+function startReaction(id, participants, now = 0, scene = null) {
+  const definition = REACTION_LIBRARY.find((reaction) => reaction.id === id);
+  const director = new ReactionDirector({
+    random: sequenceRandom(0, 0, 0, 0),
+    library: [definition],
+  });
+
+  director.update(now, participants, scene);
+  return director;
+}
+
+function punchShapes(shapes) {
+  return shapes.filter((shape) => shape.reaction === "punch");
+}
+
+function punchHand(shapes) {
+  // The elbow circle comes first and the fist last.
+  return punchShapes(shapes)
+    .filter((shape) => shape.kind === "circle")
+    .pop();
+}
+
+function torsoX(shapes) {
+  return shapes.find((shape) => shape.kind === "rectangle").x;
+}
+
+function approx(actual, expected, label = "", tolerance = 1e-6) {
+  assert.ok(
+    Math.abs(actual - expected) < tolerance,
+    `${label} expected ${expected}, got ${actual}`
+  );
+}
+
+function twoParticipants() {
+  return [
+    participant(makePose(SELF), makeFigure(), "ACTIVE", 0),
+    participant(makePose(TARGET), makeFigure(), "ACTIVE", 1),
+  ];
+}
+
+test("the reaction library exposes one module per reaction", () => {
+  assert.deepEqual(
+    REACTION_LIBRARY.map((reaction) => reaction.id),
+    ["punch", "heart", "cry", "smoke"]
+  );
+});
+
+test("the director plays one reaction every interval", () => {
+  const director = new ReactionDirector({
+    random: sequenceRandom(0, 0, 0, 0, 0),
+  });
+  const participants = twoParticipants();
+
+  const first = director.update(0, participants);
+  assert.ok(first, "a reaction starts");
+  assert.equal(first.id, "punch");
+
+  assert.ok(director.update(500, participants), "it stays active");
+  assert.equal(director.update(900, participants), null, "it ends");
+  assert.equal(director.update(9999, participants), null, "nothing in between");
+  assert.ok(director.update(10000, participants), "the next window plays");
+});
+
+test("the same reaction never plays twice in a row", () => {
+  // A random source of 0 would always pick the first entry: punch.
+  const director = new ReactionDirector({ random: () => 0 });
+  const participants = twoParticipants();
+
+  const first = director.update(0, participants);
+  assert.equal(first.id, "punch");
+
+  assert.equal(director.update(first.durationMs, participants), null);
+  const second = director.update(10000, participants);
+  assert.ok(second, "the next window plays");
+  assert.notEqual(second.id, first.id, "it does not repeat");
+
+  assert.equal(
+    director.update(10000 + second.durationMs, participants),
+    null
+  );
+  const third = director.update(20000, participants);
+  assert.ok(third, "a third window plays");
+  assert.notEqual(third.id, second.id, "it does not repeat either");
+});
+
+test("there is never more than one reaction at a time", () => {
+  const director = new ReactionDirector({
+    random: sequenceRandom(0, 0, 0, 0),
+  });
+  const participants = twoParticipants();
+
+  director.update(0, participants);
+
+  assert.equal(director.active.id, "punch");
+  assert.deepEqual(director.props(0).shapes, [], "no heart while punching");
+  assert.ok(director.reactionFor(participants[0]), "the attacker owns the punch");
+  assert.equal(director.reactionFor(participants[1]), null);
+
+  // A second update inside the window cannot start another reaction.
+  director.update(500, participants);
+  assert.equal(director.active.id, "punch");
+});
+
+test("the punch stays on the attacker when participants are rebuilt", () => {
+  const attackerFigure = makeFigure();
+  const victimFigure = makeFigure();
+  const first = [
+    participant(makePose(SELF), attackerFigure, "ACTIVE", 0),
+    participant(makePose(TARGET), victimFigure, "ACTIVE", 1),
+  ];
+  const director = startReaction("punch", first);
+
+  // The tracker rebuilds participant objects every frame; the slot is stable.
+  const rebuilt = [
+    participant(makePose(SELF), attackerFigure, "ACTIVE", 0),
+    participant(makePose(TARGET), victimFigure, "ACTIVE", 1),
+  ];
+
+  assert.equal(director.reactionFor(rebuilt[0])?.id, "punch");
+  assert.equal(director.reactionFor(rebuilt[1]), null);
+});
+
+test("a figure alone never gets a reaction", () => {
+  const director = new ReactionDirector({ random: () => 0 });
+  const only = [participant(makePose(SELF), makeFigure())];
+
+  assert.equal(director.update(0, only), null);
+  assert.deepEqual(director.props(0).shapes, []);
+});
+
+test("the punch lends its arm to the attacker", () => {
+  const participants = twoParticipants();
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(participants[0]);
+  const shapes = participants[0].figure.shapes(
+    participants[0].pose,
+    CONFIG.figure.reactions.punch.durationMs * 0.7,
+    participants[1],
+    reaction
+  );
+  const hand = punchHand(shapes);
+
+  assert.ok(hand, "the punch draws a fist");
+  assert.ok(hand.x > 500, "the fist reaches the companion's side");
+});
+
+test("the punch uses the arm on the companion's side", () => {
+  const participants = [
+    participant(makePose(SELF), makeFigure(), "ACTIVE", 0),
+    participant(makePose(COMPANION_LEFT), makeFigure(), "ACTIVE", 1),
+  ];
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(participants[0]);
+  const shapes = participants[0].figure.shapes(
+    participants[0].pose,
+    CONFIG.figure.reactions.punch.durationMs * 0.7,
+    participants[1],
+    reaction
+  );
+
+  const hand = punchHand(shapes);
+  assert.ok(hand, "the punch draws a fist");
+  assert.ok(hand.x < 270, "the fist reaches the companion on the left");
+
+  const freeHand = shapes.find(
+    (shape) =>
+      shape.kind === "circle" &&
+      !shape.reaction &&
+      Math.abs(shape.x - 420) < 1e-6 &&
+      Math.abs(shape.y - 350) < 1e-6
+  );
+  assert.ok(freeHand, "the free arm keeps its tracked hand");
+});
+
+test("the punch picks the shoulder by position when labels are mirrored", () => {
+  const swapped = makePose({
+    left_shoulder: { x: 370, y: 200 },
+    right_shoulder: { x: 270, y: 200 },
+    left_elbow: { x: 400, y: 280 },
+    right_elbow: { x: 240, y: 280 },
+    left_wrist: { x: 420, y: 350 },
+    right_wrist: { x: 220, y: 350 },
+  });
+  const participants = [
+    participant(swapped, makeFigure(), "ACTIVE", 0),
+    participant(makePose(TARGET), makeFigure(), "ACTIVE", 1),
+  ];
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(participants[0]);
+  const hand = punchHand(
+    participants[0].figure.shapes(
+      participants[0].pose,
+      CONFIG.figure.reactions.punch.durationMs * 0.7,
+      participants[1],
+      reaction
+    )
+  );
+
+  assert.ok(hand, "the punch draws a fist");
+  assert.ok(hand.x > 500, "it punches from the rightmost shoulder");
+});
+
+test("the arm grows during the strike and retracts afterwards", () => {
+  const participants = twoParticipants();
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(participants[0]);
+  const [attacker, victim] = participants;
+  const duration = CONFIG.figure.reactions.punch.durationMs;
+  const shoulder = { x: 370, y: 200 };
+
+  const early = punchHand(
+    attacker.figure.shapes(attacker.pose, duration * 0.15, victim, reaction)
+  );
+  const late = punchHand(
+    attacker.figure.shapes(attacker.pose, duration * 0.7, victim, reaction)
+  );
+
+  assert.ok(early, "the arm is already out during the strike");
+  assert.ok(late, "the arm is extended at full reach");
+  assert.ok(
+    Math.hypot(early.x - shoulder.x, early.y - shoulder.y) <
+      Math.hypot(late.x - shoulder.x, late.y - shoulder.y),
+    "the arm extends towards the companion"
+  );
+});
+
+test("the punch falls back to proportional arm lengths when keypoints hide", () => {
+  const self = makePose({
+    ...SELF,
+    right_elbow: null,
+    right_wrist: null,
+  });
+  const participants = [
+    participant(self, makeFigure(), "ACTIVE", 0),
+    participant(makePose(COMPANION_RIGHT), makeFigure(), "ACTIVE", 1),
+  ];
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(participants[0]);
+  const hand = punchHand(
+    participants[0].figure.shapes(
+      participants[0].pose,
+      CONFIG.figure.reactions.punch.durationMs * 0.7,
+      participants[1],
+      reaction
+    )
+  );
+  const reach =
+    100 * CONFIG.figure.reactions.punch.upperFallback +
+    100 * CONFIG.figure.reactions.punch.forearmFallback;
+
+  assert.ok(hand, "the punch still draws a fist");
+  approx(hand.x, 370 + reach, "fist x", 1);
+});
+
+test("the fist only hits inside the torso hitbox", () => {
+  const victim = makePose(TARGET);
+
+  assert.equal(fistTouchesBody({ x: 520, y: 200, radius: 15 }, victim), true);
+  assert.equal(fistTouchesBody({ x: 580, y: 200, radius: 15 }, victim), false);
+});
+
+test("a landed punch knocks the victim back and draws dizzy stars", () => {
+  const participants = [
+    participant(makePose(SELF), makeFigure(), "ACTIVE", 0),
+    participant(makePose(TARGET), makeFigure(), "ACTIVE", 1),
+  ];
+  const [attacker, victim] = participants;
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(attacker);
+
+  // Frame 0: the attacker starts the punch, the victim is untouched.
+  attacker.figure.shapes(attacker.pose, 0, victim, reaction);
+  const clean = victim.figure.shapes(victim.pose, 0, attacker, null);
+  assert.equal(clean.filter((shape) => shape.kind === "star").length, 0);
+  approx(torsoX(clean), 520, "chest x before the hit");
+
+  // The fist reaches the chest and the victim reacts in the same frame.
+  const hit = victim.figure.shapes(victim.pose, 300, attacker, null);
+  assert.equal(
+    hit.filter((shape) => shape.kind === "star").length,
+    CONFIG.figure.impact.stars.count
+  );
+
+  // Mid-knockback the body is pushed away from the fist.
+  const pushed = victim.figure.shapes(victim.pose, 625, attacker, null);
+  assert.ok(torsoX(pushed) > 528, "the chest moves away from the punch");
+
+  const eyes = pushed.filter(
+    (shape) => shape.fill === CONFIG.figure.eyeColor
+  );
+  assert.equal(eyes.length, 2);
+  for (const eye of eyes) {
+    assert.ok(Math.abs(eye.angle) > 0.1, "the eyes roll while dizzy");
+  }
+
+  // After the reaction the figure is back on the tracked pose.
+  const recovered = victim.figure.shapes(victim.pose, 2100, attacker, null);
+  assert.equal(
+    recovered.filter((shape) => shape.kind === "star").length,
+    0,
+    "the stars disappear"
+  );
+  approx(torsoX(recovered), 520, "the chest returns to the pose");
+});
+
+test("a punch out of reach does not hit", () => {
+  const participants = [
+    participant(makePose(SELF), makeFigure(), "ACTIVE", 0),
+    participant(makePose(FAR_TARGET), makeFigure(), "ACTIVE", 1),
+  ];
+  const [attacker, victim] = participants;
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(attacker);
+
+  attacker.figure.shapes(attacker.pose, 0, victim, reaction);
+  const shapes = victim.figure.shapes(victim.pose, 400, attacker, null);
+
+  assert.equal(shapes.filter((shape) => shape.kind === "star").length, 0);
+  approx(torsoX(shapes), 920, "the far victim does not move");
+});
+
+test("a figure with no punch exposes no fist", () => {
+  const figure = makeFigure();
+
+  assert.equal(figure.punchFist(0), null);
+});
+
+test("a heart appears between both figures", () => {
+  const participants = twoParticipants();
+  const director = startReaction("heart", participants);
+
+  assert.equal(director.active.id, "heart");
+  assert.equal(director.reactionFor(participants[0]), null);
+  assert.equal(director.reactionFor(participants[1]), null);
+
+  const duration = CONFIG.figure.reactions.heart.durationMs;
+  const props = director.props(duration * 0.5);
+  const heart = props.shapes.find(
+    (shape) => shape.kind === "heart" && shape.main
+  );
+
+  assert.ok(heart, "the heart appears");
+  approx(heart.x, 420, "the heart is centred between both chests");
+  approx(heart.y, 100, "the heart is halfway to the top", 1e-4);
+  assert.ok(heart.size > 0, "the heart has a size");
+  assert.ok(props.colors, "the drawer palette is used");
+});
+
+test("the heart flies to the scene ceiling and disappears there", () => {
+  const participants = twoParticipants();
+  const director = startReaction("heart", participants, 0, { top: -40 });
+  const duration = CONFIG.figure.reactions.heart.durationMs;
+
+  const late = director
+    .props(duration * 0.95)
+    .shapes.find((shape) => shape.kind === "heart" && shape.main);
+
+  assert.ok(late, "the heart is still visible");
+  assert.ok(late.y < 0, "the heart reaches the top of the page");
+  assert.ok(late.size > 0, "it is still visible before the final shrink");
+
+  director.update(duration, participants);
+  assert.equal(
+    director.props(duration).shapes.length,
+    0,
+    "it disappears at the top"
+  );
+});
+
+test("the heart disappears after its reaction", () => {
+  const participants = twoParticipants();
+  const director = startReaction("heart", participants);
+  const duration = CONFIG.figure.reactions.heart.durationMs;
+
+  director.update(duration, participants);
+
+  assert.equal(
+    director.props(duration).shapes.filter(
+      (shape) => shape.kind === "heart"
+    ).length,
+    0,
+    "the heart is gone"
+  );
+});
+
+test("the flying heart leaves a particle trail of smaller hearts", () => {
+  const participants = twoParticipants();
+  const director = startReaction("heart", participants);
+  const duration = CONFIG.figure.reactions.heart.durationMs;
+  const hearts = director
+    .props(duration * 0.8)
+    .shapes.filter((shape) => shape.kind === "heart");
+  const main = hearts.find((shape) => shape.main);
+  const trail = hearts.filter((shape) => !shape.main);
+
+  assert.ok(main, "the main heart is flying");
+  assert.ok(trail.length > 0, "particles appear behind it");
+  for (const heart of trail) {
+    assert.ok(heart.size < main.size, "particles are smaller");
+    assert.ok(heart.y >= main.y, "particles stay behind the main heart");
+    assert.ok(heart.y <= 200, "particles stay on the travelled path");
+    assert.ok(
+      heart.y > main.y + main.size * 0.6,
+      "particles emerge below the main heart silhouette"
+    );
+  }
+
+  // The oldest particle is the lowest one and has faded the most.
+  const oldest = trail.reduce(
+    (lowest, heart) => (heart.y > lowest.y ? heart : lowest),
+    trail[0]
+  );
+  const newest = trail.reduce(
+    (highest, heart) => (heart.y < highest.y ? heart : highest),
+    trail[0]
+  );
+  assert.ok(oldest.size < newest.size, "particles shrink as they age");
+});
+
+test("the heart uses the drawer's palette", () => {
+  const palette = { bone: "#112233", joint: "#445566" };
+  const participants = [
+    participant(makePose(SELF), makeFigure({ palette }), "ACTIVE", 0),
+    participant(makePose(TARGET), makeFigure(), "ACTIVE", 1),
+  ];
+  const director = startReaction("heart", participants);
+  const props = director.props(CONFIG.figure.reactions.heart.durationMs * 0.5);
+
+  assert.equal(props.colors.bone, palette.bone);
+  assert.equal(props.colors.joint, palette.joint);
+});
+
+test("a crying figure starts with drops and turns into a wavy stream", () => {
+  const crier = participant(makePose(CRYING), makeFigure(), "ACTIVE", 0);
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const participants = [crier, companion];
+  const director = startReaction("cry", participants);
+  const reaction = director.reactionFor(crier);
+  const duration = CONFIG.figure.reactions.cry.durationMs;
+
+  assert.equal(reaction?.id, "cry");
+  assert.equal(director.reactionFor(companion), null);
+  assert.deepEqual(
+    director.props(duration * 0.5).shapes,
+    [],
+    "the cry draws no scene prop"
+  );
+
+  // First phase: drops only.
+  const early = crier.figure.shapes(
+    crier.pose,
+    duration * 0.1,
+    companion,
+    reaction
+  );
+  const earlyDrops = early.filter(
+    (shape) => shape.kind === "ellipse" && shape.reaction === "cry"
+  );
+  assert.ok(earlyDrops.length > 0, "the cry starts with drops");
+  assert.equal(
+    early.find((shape) => shape.kind === "stream"),
+    undefined,
+    "no stream yet"
+  );
+
+  // Later: the drops become one wavy line per visible eye.
+  const later = crier.figure.shapes(
+    crier.pose,
+    duration * 0.45,
+    companion,
+    reaction
+  );
+  const streams = later.filter((shape) => shape.kind === "stream");
+
+  assert.equal(streams.length, 2, "one stream per visible eye");
+  for (const stream of streams) {
+    assert.ok(stream.points.length > 10, "the stream is a smooth polyline");
+  }
+
+  const starts = streams
+    .map((stream) => stream.points[0].x)
+    .sort((a, b) => a - b);
+  approx(starts[0], 305, "the left stream starts at the left eye");
+  approx(starts[1], 335, "the right stream starts at the right eye");
+
+  const xs = streams[0].points.map((point) => point.x);
+  assert.ok(
+    Math.max(...xs) - Math.min(...xs) > 1,
+    "the stream undulates sideways"
+  );
+  const ys = streams[0].points.map((point) => point.y);
+  assert.ok(ys[ys.length - 1] > ys[0], "the stream falls downward");
+
+  // It disappears with the reaction instead of retracting.
+  const late = crier.figure.shapes(
+    crier.pose,
+    duration * 0.95,
+    companion,
+    reaction
+  );
+  const lateStreams = late.filter((shape) => shape.kind === "stream");
+  assert.equal(lateStreams.length, 2, "the streams last until the end");
+  const lateYs = lateStreams[0].points.map((point) => point.y);
+  approx(
+    lateYs[lateYs.length - 1] - lateYs[0],
+    CONFIG.figure.reactions.cry.stream.length * 100,
+    "the stream keeps its full length until it disappears"
+  );
+
+  const stopped = crier.figure.shapes(
+    crier.pose,
+    duration,
+    companion,
+    reaction
+  );
+  assert.equal(
+    stopped.filter((shape) => shape.reaction === "cry").length,
+    0,
+    "tears stop with the reaction"
+  );
+});
+
+test("a cry needs a visible eye", () => {
+  const participants = twoParticipants();
+  const director = startReaction("cry", participants);
+
+  assert.equal(director.active, null);
+});
+
+test("an angry figure puffs smoke from the top of its head", () => {
+  const smoker = participant(makePose(CRYING), makeFigure(), "ACTIVE", 0);
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const director = startReaction("smoke", [smoker, companion]);
+  const reaction = director.reactionFor(smoker);
+  const duration = CONFIG.figure.reactions.smoke.durationMs;
+  const head = smoker.pose.headCenter();
+
+  assert.equal(reaction?.id, "smoke");
+  assert.equal(director.reactionFor(companion), null);
+
+  const shapes = smoker.figure.shapes(
+    smoker.pose,
+    duration * 0.5,
+    companion,
+    reaction
+  );
+  const puffs = shapes.filter((shape) => shape.reaction === "smoke");
+
+  assert.ok(puffs.length > 0, "smoke puffs appear");
+  for (const puff of puffs) {
+    assert.equal(puff.kind, "puff");
+    assert.ok(puff.y < head.y, "puffs rise above the head centre");
+    assert.ok(puff.radius > 0, "puffs have size");
+    assert.ok(puff.opacity > 0, "puffs have opacity");
+  }
+
+  const ys = puffs.map((puff) => puff.y);
+  assert.ok(Math.min(...ys) < Math.max(...ys), "older puffs are higher");
+
+  const stopped = smoker.figure.shapes(
+    smoker.pose,
+    duration,
+    companion,
+    reaction
+  );
+  assert.equal(
+    stopped.filter((shape) => shape.reaction === "smoke").length,
+    0,
+    "the smoke stops with the reaction"
+  );
+});
+
+test("smoke needs a visible head", () => {
+  const participants = twoParticipants();
+  const director = startReaction("smoke", participants);
+
+  assert.equal(director.active, null);
+});
+
+test("the smoker squints and frowns while puffing", () => {
+  const smoker = participant(makePose(CRYING), makeFigure(), "ACTIVE", 0);
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const director = startReaction("smoke", [smoker, companion]);
+  const reaction = director.reactionFor(smoker);
+
+  const neutral = smoker.figure
+    .shapes(smoker.pose, 0, companion, null)
+    .filter((shape) => shape.fill === CONFIG.figure.eyeColor);
+  const angry = smoker.figure
+    .shapes(smoker.pose, 700, companion, reaction)
+    .filter((shape) => shape.fill === CONFIG.figure.eyeColor);
+
+  assert.equal(neutral.length, 2);
+  assert.equal(angry.length, 2);
+  for (let index = 0; index < 2; index += 1) {
+    assert.ok(angry[index].ry < neutral[index].ry, "the eyes squint");
+  }
+  assert.ok(
+    Math.abs(angry[0].angle - angry[1].angle) > 0.1,
+    "the eyes tilt inward in opposite directions"
+  );
+});
+
+test("the tear stream scales with the body size", () => {
+  const crier = participant(
+    makePose(CRYING),
+    makeFigure({ size: 1.5 }),
+    "ACTIVE",
+    0
+  );
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const director = startReaction("cry", [crier, companion]);
+  const reaction = director.reactionFor(crier);
+  const duration = CONFIG.figure.reactions.cry.durationMs;
+
+  const shapes = crier.figure.shapes(
+    crier.pose,
+    duration * 0.5,
+    companion,
+    reaction
+  );
+  const stream = shapes.find((shape) => shape.kind === "stream");
+  const anchor = { x: 320, y: 200 };
+
+  assert.ok(stream, "the stream exists");
+  // The first point sits at the eye (305, ...), scaled around the chest.
+  approx(
+    stream.points[0].x,
+    anchor.x + (305 - anchor.x) * 1.5,
+    "stream start x scales with the body",
+    1e-6
+  );
+  approx(
+    stream.width,
+    CONFIG.figure.reactions.cry.stream.width * 100 * 1.5,
+    "stream width scales with the body",
+    1e-6
+  );
+});

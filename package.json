@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "npm run test:unit && npm run test:modelo",
+    "test": "npm run test:unit && npm run test:modelo && npm run test:figuras",
     "test:unit": "node --test tests/participants.test.js reaccions.test.mjs",
     "test:modelo": "node tests/verificar-seeded-random.mjs && node tests/verificar-familias.mjs && node tests/verificar-paletas.mjs && node tests/verificar-genomas.mjs && node tests/verificar-composicion.mjs && node tests/verificar-ciclo.mjs && node tests/verificar-tracking.mjs && node tests/verificar-pose.mjs && node tests/verificar-adaptador.mjs && node tests/verificar-comportamientos.mjs && node tests/verificar-experiencia.mjs",
+    "test:figuras": "node --test tests/figure.test.js tests/reactions.test.js tests/rig.test.js tests/skeleton-view.test.js",
     "serve": "python3 -m http.server 8080"
   }
 }

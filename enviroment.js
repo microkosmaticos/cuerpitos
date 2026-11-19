@@ -30,11 +30,10 @@
    The big sparkles also breathe in size, each one on its own clock
    (see the "Stars animation" section below).
 
-   Lifecycle: this module owns p5's preload/setup/draw/windowResized
-   hooks while it is the only sketch on the page. If another module
-   later owns the lifecycle, call environmentPreload(),
-   environmentSetup(), environmentDraw() and environmentResized() from
-   that module instead of keeping the hooks at the bottom of this file.
+   Lifecycle: this module is not a sketch. The p5 instance that owns the
+   page calls environmentPreload(p), environmentSetup(p),
+   environmentDraw(p) and environmentResized(p), so the artwork is painted
+   as the background of the same canvas that draws the figures.
    ------------------------------------------------------------------ */
 
 /** Width of the shared artboard, in pixels. */
@@ -74,14 +73,14 @@ const backgroundLayers = {
  *
  * @returns {{x: number, y: number, w: number, h: number}}
  */
-function backgroundCoverRect() {
-  const scale = Math.max(width / ART_WIDTH, height / ART_HEIGHT);
+function backgroundCoverRect(p) {
+  const scale = Math.max(p.width / ART_WIDTH, p.height / ART_HEIGHT);
   const w = ART_WIDTH * scale;
   const h = ART_HEIGHT * scale;
 
   return {
-    x: (width - w) / 2,
-    y: (height - h) / 2,
+    x: (p.width - w) / 2,
+    y: (p.height - h) / 2,
     w,
     h,
   };
@@ -95,9 +94,9 @@ function backgroundCoverRect() {
  * @param {p5.Image|null} layer
  * @param {{x: number, y: number, w: number, h: number}} rect
  */
-function drawBackgroundLayer(layer, rect) {
+function drawBackgroundLayer(p, layer, rect) {
   if (!layer) return;
-  image(layer, rect.x, rect.y, rect.w, rect.h);
+  p.image(layer, rect.x, rect.y, rect.w, rect.h);
 }
 
 /**
@@ -177,7 +176,7 @@ const WAVES_NOISE_WEIGHT = 0.15;
  * @param {number} amplitude
  * @returns {number}
  */
-function wavesVerticalOffset(u, t, amplitude) {
+function wavesVerticalOffset(p, u, t, amplitude) {
   const primary =
     Math.sin(u * Math.PI * 2 * 1.15 + (t / WAVES_PRIMARY_PERIOD) * Math.PI * 2) *
     WAVES_PRIMARY_WEIGHT;
@@ -186,7 +185,7 @@ function wavesVerticalOffset(u, t, amplitude) {
     Math.sin(u * Math.PI * 2 * 2.6 - (t / WAVES_SECONDARY_PERIOD) * Math.PI * 2 + 1.7) *
     WAVES_SECONDARY_WEIGHT;
 
-  const organic = (noise(u * 2.2 + 7.5, t * 0.05) - 0.5) * 2 * WAVES_NOISE_WEIGHT;
+  const organic = (p.noise(u * 2.2 + 7.5, t * 0.05) - 0.5) * 2 * WAVES_NOISE_WEIGHT;
 
   return (primary + secondary + organic) * amplitude;
 }
@@ -197,12 +196,12 @@ function wavesVerticalOffset(u, t, amplitude) {
  * @param {p5.Image|null} layer
  * @param {{x: number, y: number, w: number, h: number}} cover
  */
-function drawAnimatedWaves(layer, cover) {
+function drawAnimatedWaves(p, layer, cover) {
   if (!layer) return;
 
   // seconds since the sketch started, so the animation is frame-rate
   // independent and always continuous (no state to reset or drift).
-  const t = millis() / 1000;
+  const t = p.millis() / 1000;
 
   // the wave height breathes between WAVES_AMPLITUDE_MIN and 100% of
   // the amplitude, so the layer never looks like it is being pushed
@@ -219,7 +218,7 @@ function drawAnimatedWaves(layer, cover) {
   const width = area.w;
   const height = area.h;
 
-  const strips = constrain(
+  const strips = p.constrain(
     Math.round(width / WAVES_STRIP_WIDTH),
     WAVES_MIN_STRIPS,
     WAVES_MAX_STRIPS
@@ -234,13 +233,13 @@ function drawAnimatedWaves(layer, cover) {
     if (stripWidth <= 0) continue;
 
     const u = (x0 + stripWidth / 2 - left) / width;
-    const offset = wavesVerticalOffset(u, t, amplitude);
+    const offset = wavesVerticalOffset(p, u, t, amplitude);
 
     // sample the matching columns of the original artwork
     const sx = ((x0 - left) / width) * layer.width;
     const sw = (stripWidth / width) * layer.width;
 
-    image(layer, x0, top + offset, stripWidth, height, sx, 0, sw, layer.height);
+    p.image(layer, x0, top + offset, stripWidth, height, sx, 0, sw, layer.height);
   }
 }
 
@@ -455,9 +454,9 @@ function starsDetect(layer) {
  *
  * @returns {p5.Graphics}
  */
-function starsCreateGlow() {
+function starsCreateGlow(p) {
   const size = 128;
-  const glow = createGraphics(size, size);
+  const glow = p.createGraphics(size, size);
 
   glow.pixelDensity(1);
 
@@ -494,7 +493,7 @@ const starsState = {
  *
  * @param {p5.Image|null} layer
  */
-function starsCreateSparkleCrops(layer) {
+function starsCreateSparkleCrops(p, layer) {
   if (!layer) return;
 
   starsState.sparkles = [];
@@ -515,7 +514,7 @@ function starsCreateSparkleCrops(layer) {
 
     if (sw <= 0 || sh <= 0) continue;
 
-    const crop = createGraphics(sw, sh);
+    const crop = p.createGraphics(sw, sh);
     crop.pixelDensity(1);
     crop.drawingContext.drawImage(layer.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
 
@@ -565,11 +564,11 @@ function starsSparkleScale(star, t) {
  * @param {p5.Image|null} layer
  * @param {{x: number, y: number, w: number, h: number}} cover
  */
-function drawAnimatedStars(layer, cover) {
+function drawAnimatedStars(p, layer, cover) {
   if (!layer) return;
 
-  const t = millis() / 1000;
-  const ctx = drawingContext;
+  const t = p.millis() / 1000;
+  const ctx = p.drawingContext;
   const sparkles = starsState.sparkles;
 
   // the original artwork, slightly dimmed so the glow can also fade
@@ -579,7 +578,7 @@ function drawAnimatedStars(layer, cover) {
     // cut the sparkles out of the layer: an even-odd path made of the
     // whole canvas plus one hole per sparkle
     ctx.beginPath();
-    ctx.rect(0, 0, width, height);
+    ctx.rect(0, 0, p.width, p.height);
     for (let i = 0; i < sparkles.length; i++) {
       const box = starsBoxRect(sparkles[i], cover);
       ctx.rect(box.x, box.y, box.w, box.h);
@@ -646,53 +645,40 @@ function drawAnimatedStars(layer, cover) {
 }
 
 /** Loads the three background artworks. */
-function environmentPreload() {
-  backgroundLayers.base = loadImage(BACKGROUND_ASSETS.base);
-  backgroundLayers.waves = loadImage(BACKGROUND_ASSETS.waves);
-  backgroundLayers.stars = loadImage(BACKGROUND_ASSETS.stars);
+function environmentPreload(p) {
+  backgroundLayers.base = p.loadImage(BACKGROUND_ASSETS.base);
+  backgroundLayers.waves = p.loadImage(BACKGROUND_ASSETS.waves);
+  backgroundLayers.stars = p.loadImage(BACKGROUND_ASSETS.stars);
 }
 
 /** Creates the full-window canvas and analyses the stars layer once. */
-function environmentSetup() {
-  createCanvas(windowWidth, windowHeight);
-  imageMode(CORNER);
+function environmentSetup(p) {
+  p.createCanvas(p.windowWidth, p.windowHeight);
+  p.imageMode(p.CORNER);
 
   starsState.list = starsDetect(backgroundLayers.stars);
-  starsCreateSparkleCrops(backgroundLayers.stars);
-  starsState.glow = starsCreateGlow();
+  starsCreateSparkleCrops(p, backgroundLayers.stars);
+  starsState.glow = starsCreateGlow(p);
 }
 
 /** Paints the background composition for the current window size. */
-function environmentDraw() {
-  background(BACKGROUND_COLOR);
+function environmentDraw(p) {
+  p.background(BACKGROUND_COLOR);
 
-  const rect = backgroundCoverRect();
-  drawBackgroundLayer(backgroundLayers.base, inflateRect(rect, BASE_BLEED));
-  drawAnimatedWaves(backgroundLayers.waves, rect);
-  drawAnimatedStars(backgroundLayers.stars, rect);
+  const rect = backgroundCoverRect(p);
+  drawBackgroundLayer(p, backgroundLayers.base, inflateRect(rect, BASE_BLEED));
+  drawAnimatedWaves(p, backgroundLayers.waves, rect);
+  drawAnimatedStars(p, backgroundLayers.stars, rect);
 }
 
 /** Keeps the canvas and the composition in sync with the window. */
-function environmentResized() {
-  resizeCanvas(windowWidth, windowHeight);
+function environmentResized(p) {
+  p.resizeCanvas(p.windowWidth, p.windowHeight);
 }
 
-/* ------------------------------------------------------------------
-   Standalone p5 lifecycle
-   ------------------------------------------------------------------ */
-
-function preload() {
-  environmentPreload();
-}
-
-function setup() {
-  environmentSetup();
-}
-
-function draw() {
-  environmentDraw();
-}
-
-function windowResized() {
-  environmentResized();
-}
+export {
+  environmentPreload,
+  environmentSetup,
+  environmentDraw,
+  environmentResized,
+};
