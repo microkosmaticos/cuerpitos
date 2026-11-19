@@ -69,6 +69,17 @@ const FAR_TARGET = {
   right_eye: { x: 940, y: 110 },
 };
 
+/** A victim a bit farther than the natural arm, but within the stretch. */
+const REACHABLE = {
+  ...TARGET,
+  left_shoulder: { x: 570, y: 200 },
+  right_shoulder: { x: 670, y: 200 },
+  left_ear: { x: 585, y: 115 },
+  right_ear: { x: 655, y: 115 },
+  left_eye: { x: 600, y: 110 },
+  right_eye: { x: 640, y: 110 },
+};
+
 function makeFigure(proportions = {}) {
   return new GeometricFigure(
     new FigureProportions({
@@ -417,6 +428,24 @@ test("a punch out of reach does not hit", () => {
 
   assert.equal(shapes.filter((shape) => shape.kind === "star").length, 0);
   approx(torsoX(shapes), 920, "the far victim does not move");
+});
+
+test("a punch stretches to reach a slightly farther companion", () => {
+  const participants = [
+    participant(makePose(SELF), makeFigure(), "ACTIVE", 0),
+    participant(makePose(REACHABLE), makeFigure(), "ACTIVE", 1),
+  ];
+  const [attacker, victim] = participants;
+  const director = startReaction("punch", participants);
+  const reaction = director.reactionFor(attacker);
+
+  attacker.figure.shapes(attacker.pose, 0, victim, reaction);
+  const shapes = victim.figure.shapes(victim.pose, 300, attacker, null);
+
+  assert.ok(
+    shapes.filter((shape) => shape.kind === "star").length > 0,
+    "the stretched punch connects and the stars appear"
+  );
 });
 
 test("a figure with no punch exposes no fist", () => {

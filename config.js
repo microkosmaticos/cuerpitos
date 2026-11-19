@@ -145,6 +145,9 @@ export const CONFIG = {
         // punching arm keypoints are hidden at the moment of the punch.
         upperFallback: 0.85,
         forearmFallback: 0.73,
+        // How far the punch may stretch beyond the figure's own arm to reach
+        // the companion's chest (so the hitbox can actually connect).
+        maxStretch: 1.6,
       },
       // A heart pops up between both bodies and flies to the top edge of the
       // page: the pair is in love. Position is the midpoint of both chests;

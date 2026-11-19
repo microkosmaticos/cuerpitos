@@ -36,13 +36,28 @@ export const punchReaction = {
 
     const base = Math.max(1, attacker.pose.scale || 1);
     const armLength = attacker.figure?.proportions?.armLength ?? 1;
-    const { upperFallback, forearmFallback } = CONFIG.figure.reactions.punch;
+    const { upperFallback, forearmFallback, maxStretch } =
+      CONFIG.figure.reactions.punch;
     const elbow = attacker.pose.isVisible(`${side}_elbow`)
       ? attacker.pose.get(`${side}_elbow`)
       : null;
     const wrist = attacker.pose.isVisible(`${side}_wrist`)
       ? attacker.pose.get(`${side}_wrist`)
       : null;
+    const naturalUpper =
+      (elbow ? distance(shoulder, elbow) : base * upperFallback) * armLength;
+    const naturalForearm =
+      (elbow && wrist ? distance(elbow, wrist) : base * forearmFallback) *
+      armLength;
+    const naturalReach = naturalUpper + naturalForearm;
+    // Stretch the straight punch just enough to reach the companion's chest,
+    // capped, so the hitbox can actually connect at normal pair distances.
+    const gap = distance(shoulder, theirs);
+    const reach = Math.max(
+      naturalReach,
+      Math.min(gap, naturalReach * (maxStretch ?? 1))
+    );
+    const stretch = naturalReach > 0 ? reach / naturalReach : 1;
 
     return {
       owner: attacker,
@@ -54,12 +69,8 @@ export const punchReaction = {
         base,
         // The figure's own arm length is baked in here, so the fist used for
         // hit detection is exactly the drawn fist.
-        upperLength:
-          (elbow ? distance(shoulder, elbow) : base * upperFallback) *
-          armLength,
-        forearmLength:
-          (elbow && wrist ? distance(elbow, wrist) : base * forearmFallback) *
-          armLength,
+        upperLength: naturalUpper * stretch,
+        forearmLength: naturalForearm * stretch,
       },
     };
   },
