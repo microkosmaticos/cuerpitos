@@ -231,6 +231,11 @@ export class SkeletonView {
         continue;
       }
 
+      if (shape.kind === "puff") {
+        this.drawPuff(p, shape, transform, alpha);
+        continue;
+      }
+
       const center = this.project(shape, transform);
       this.styleShape(p, shape, colors, alpha);
 
@@ -375,6 +380,50 @@ export class SkeletonView {
       p.vertex(projected.x, projected.y);
     }
     p.endShape();
+  }
+
+  /**
+   * Soft smoke puff: a radial gradient that is dense in the centre and fades
+   * to fully transparent at the edge, so the smoke never reads as a bubble.
+   */
+  drawPuff(p, shape, transform, alpha) {
+    const center = this.project(shape, transform);
+    const radius = shape.radius * transform.scale;
+    if (radius <= 0) return;
+
+    const opacity = Math.max(0, Math.min(1, alpha * (shape.opacity ?? 1)));
+    const context = p.drawingContext;
+
+    if (context && typeof context.createRadialGradient === "function") {
+      const gradient = context.createRadialGradient(
+        center.x,
+        center.y,
+        0,
+        center.x,
+        center.y,
+        radius
+      );
+      gradient.addColorStop(0, this.rgba(shape.color, opacity));
+      gradient.addColorStop(0.55, this.rgba(shape.color, opacity * 0.5));
+      gradient.addColorStop(1, this.rgba(shape.color, 0));
+      context.fillStyle = gradient;
+      context.beginPath();
+      context.arc(center.x, center.y, radius, 0, Math.PI * 2);
+      context.fill();
+      return;
+    }
+
+    // Fallback for a non-2D canvas: a translucent circle.
+    p.noStroke();
+    p.fill(this.withAlpha(p, shape.color, opacity));
+    p.circle(center.x, center.y, radius * 2);
+  }
+
+  rgba(hex, alpha) {
+    const red = parseInt(hex.slice(1, 3), 16);
+    const green = parseInt(hex.slice(3, 5), 16);
+    const blue = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
   }
 
   drawPose(p, pose, transform, colors, alpha, drawHead) {

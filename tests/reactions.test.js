@@ -141,7 +141,7 @@ function twoParticipants() {
 test("the reaction library exposes one module per reaction", () => {
   assert.deepEqual(
     REACTION_LIBRARY.map((reaction) => reaction.id),
-    ["punch", "heart", "cry"]
+    ["punch", "heart", "cry", "smoke"]
   );
 });
 
@@ -603,6 +603,80 @@ test("a cry needs a visible eye", () => {
   const director = startReaction("cry", participants);
 
   assert.equal(director.active, null);
+});
+
+test("an angry figure puffs smoke from the top of its head", () => {
+  const smoker = participant(makePose(CRYING), makeFigure(), "ACTIVE", 0);
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const director = startReaction("smoke", [smoker, companion]);
+  const reaction = director.reactionFor(smoker);
+  const duration = CONFIG.figure.reactions.smoke.durationMs;
+  const head = smoker.pose.headCenter();
+
+  assert.equal(reaction?.id, "smoke");
+  assert.equal(director.reactionFor(companion), null);
+
+  const shapes = smoker.figure.shapes(
+    smoker.pose,
+    duration * 0.5,
+    companion,
+    reaction
+  );
+  const puffs = shapes.filter((shape) => shape.reaction === "smoke");
+
+  assert.ok(puffs.length > 0, "smoke puffs appear");
+  for (const puff of puffs) {
+    assert.equal(puff.kind, "puff");
+    assert.ok(puff.y < head.y, "puffs rise above the head centre");
+    assert.ok(puff.radius > 0, "puffs have size");
+    assert.ok(puff.opacity > 0, "puffs have opacity");
+  }
+
+  const ys = puffs.map((puff) => puff.y);
+  assert.ok(Math.min(...ys) < Math.max(...ys), "older puffs are higher");
+
+  const stopped = smoker.figure.shapes(
+    smoker.pose,
+    duration,
+    companion,
+    reaction
+  );
+  assert.equal(
+    stopped.filter((shape) => shape.reaction === "smoke").length,
+    0,
+    "the smoke stops with the reaction"
+  );
+});
+
+test("smoke needs a visible head", () => {
+  const participants = twoParticipants();
+  const director = startReaction("smoke", participants);
+
+  assert.equal(director.active, null);
+});
+
+test("the smoker squints and frowns while puffing", () => {
+  const smoker = participant(makePose(CRYING), makeFigure(), "ACTIVE", 0);
+  const companion = participant(makePose(TARGET), makeFigure(), "ACTIVE", 1);
+  const director = startReaction("smoke", [smoker, companion]);
+  const reaction = director.reactionFor(smoker);
+
+  const neutral = smoker.figure
+    .shapes(smoker.pose, 0, companion, null)
+    .filter((shape) => shape.fill === CONFIG.figure.eyeColor);
+  const angry = smoker.figure
+    .shapes(smoker.pose, 700, companion, reaction)
+    .filter((shape) => shape.fill === CONFIG.figure.eyeColor);
+
+  assert.equal(neutral.length, 2);
+  assert.equal(angry.length, 2);
+  for (let index = 0; index < 2; index += 1) {
+    assert.ok(angry[index].ry < neutral[index].ry, "the eyes squint");
+  }
+  assert.ok(
+    Math.abs(angry[0].angle - angry[1].angle) > 0.1,
+    "the eyes tilt inward in opposite directions"
+  );
 });
 
 test("the tear stream scales with the body size", () => {

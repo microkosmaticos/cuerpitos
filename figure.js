@@ -310,23 +310,46 @@ class EyeExpression {
     return Math.min(0.25, Math.max(0, (now - this.updatedAt) / 1000));
   }
 
-  shapes(headRadius) {
+  shapes(headRadius, expression = {}) {
     const ratios = CONFIG.figure.ratios;
     const eyes = CONFIG.figure.eyes;
     const rx = headRadius * ratios.eyeWidth;
     const openRy = headRadius * ratios.eyeHeight;
+    const squint = expression.squint ?? 1;
+    const tilt = expression.tilt ?? 0;
+    const mirror = CONFIG.skeleton.mirror;
 
-    return EYE_SIDES.map((side) => this.state[side])
-      .filter((state) => state.x != null && state.y != null)
-      .map((state) =>
-        eyeAt(
-          { x: state.x, y: state.y },
-          rx,
-          openRy * Math.max(this.openness, eyes.closedHeight),
-          this.angle,
-          CONFIG.figure.eyeColor
-        )
+    const visible = EYE_SIDES.map((side) => ({
+      side,
+      state: this.state[side],
+    })).filter(({ state }) => state.x != null && state.y != null);
+    if (visible.length === 0) return [];
+
+    // Which tracked eye ends up on the screen left after the mirror.
+    const left = this.state.left;
+    const right = this.state.right;
+    const leftIsScreenLeft =
+      left.x != null && right.x != null
+        ? mirror
+          ? left.x > right.x
+          : left.x < right.x
+        : true;
+    // The view draws -angle when mirrored, so compensate to keep the angry
+    // tilt pointing inward on screen.
+    const shapeTilt = mirror ? -tilt : tilt;
+
+    return visible.map(({ side, state }) => {
+      const isScreenLeft = side === "left" ? leftIsScreenLeft : !leftIsScreenLeft;
+      const sideTilt = isScreenLeft ? shapeTilt : -shapeTilt;
+
+      return eyeAt(
+        { x: state.x, y: state.y },
+        rx,
+        openRy * Math.max(this.openness, eyes.closedHeight) * squint,
+        this.angle + sideTilt,
+        CONFIG.figure.eyeColor
       );
+    });
   }
 }
 
@@ -404,13 +427,21 @@ export class GeometricFigure {
     if (head) {
       shapes.push(head);
       // Eyes only make sense on a head, and they ride on top of it.
-      shapes.push(...this.eyeShapes(pose, base, now));
+      const expression =
+        reaction?.id === "smoke"
+          ? CONFIG.figure.reactions.smoke.eyes
+          : null;
+      shapes.push(...this.eyeShapes(pose, base, now, expression));
     }
 
     shapes.push(...this.accessoryShapes(pose, base));
 
     if (reaction?.id === "cry" && head) {
       shapes.push(...this.tearShapes(base, now, reaction.state));
+    }
+
+    if (reaction?.id === "smoke" && head) {
+      shapes.push(...this.smokeShapes(pose, base, now, reaction.state));
     }
 
     // A companion's punch can land on this body: knockback, dizzy sway and
@@ -472,6 +503,8 @@ export class GeometricFigure {
       } else if (shape.kind === "star") {
         scaled.radius = shape.radius * size;
         scaled.innerRadius = shape.innerRadius * size;
+      } else if (shape.kind === "puff") {
+        scaled.radius = shape.radius * size;
       } else {
         scaled.length = shape.length * size;
         scaled.thickness = shape.thickness * size;
@@ -716,6 +749,96 @@ export class GeometricFigure {
   }
 
   /**
+   * Smoke puffs for the smoke reaction. Each puff is born at the top of the
+   * head, rises, drifts sideways and swells then fades. Stateless and derived
+   * from the clock.
+   */
+  smokeShapes(pose, base, now, state) {
+    const config = CONFIG.figure.reactions.smoke;
+    const elapsed = now - state.startedAt;
+    const progress = elapsed / config.durationMs;
+    if (!(progress >= 0) || progress >= 1) return [];
+
+    const head = pose.headCenter();
+    if (!head) return [];
+
+    const headRadius = base * this.proportions.headSize;
+    const first = Math.max(
+      0,
+      Math.ceil((elapsed - config.lifeMs) / config.spawnMs)
+    );
+    const last = Math.floor(elapsed / config.spawnMs);
+    const puffs = [];
+
+    for (let index = first; index <= last; index += 1) {
+      if (puffs.length >= config.max) break;
+
+      const spawnProgress = (index * config.spawnMs) / config.durationMs;
+      if (spawnProgress > config.maxProgress) continue;
+
+      const age = elapsed - index * config.spawnMs;
+      if (age < 0 || age >= config.lifeMs) continue;
+
+      const life = age / config.lifeMs;
+      const radius = config.size * base * (0.5 + 0.9 * life);
+      const startX =
+        head.x +
+        (variation(index, 1) - 0.5) * config.spread * headRadius * 2;
+      const startY =
+        head.y -
+        headRadius * 0.85 +
+        (variation(index, 2) - 0.5) * headRadius * 0.25;
+      const drift =
+        ((variation(index, 4) - 0.5) +
+          Math.sin(index * 1.7 + life * 3.2) * 0.5) *
+        config.drift *
+        base *
+        life;
+      const rise = config.rise * base * life;
+
+      // A puff is a cloud of overlapping soft lobes, each with its own size,
+      // offset and opacity, so the silhouette is an irregular organic shape
+      // instead of a perfect circle. The lobes swirl slowly as they rise.
+      const lobes =
+        config.lobes[0] +
+        Math.floor(
+          variation(index, 0) * (config.lobes[1] - config.lobes[0] + 1)
+        );
+
+      for (let lobe = 0; lobe < lobes; lobe += 1) {
+        const isCentre = lobe === 0;
+        const angle =
+          variation(index, lobe + 5) * Math.PI * 2 + life * config.swirl;
+        const offset = isCentre
+          ? 0
+          : radius * (0.2 + 0.6 * variation(index, lobe + 8));
+        const lobeRadius =
+          radius *
+          (isCentre
+            ? 0.9
+            : 0.5 + 0.6 * variation(index, lobe + 11));
+        const opacity =
+          config.opacity *
+          (0.4 + 0.6 * variation(index, lobe + 14)) *
+          (1 - life);
+        if (opacity < 0.005) continue;
+
+        puffs.push({
+          kind: "puff",
+          x: startX + drift + Math.cos(angle) * offset,
+          y: startY - rise + Math.sin(angle) * offset * 0.6,
+          radius: lobeRadius,
+          color: this.proportions.palette.joint,
+          opacity,
+          reaction: "smoke",
+        });
+      }
+    }
+
+    return puffs;
+  }
+
+  /**
    * Applies the receiving side of a hit: the whole figure is pushed away and
    * sways, the eyes roll and stars orbit the head. Runs before `scaleShapes`
    * so every offset grows with the body.
@@ -805,11 +928,15 @@ export class GeometricFigure {
   /**
    * Oval eyes driven by the eye tracking. `now` (milliseconds) advances the
    * blink/squint animation; without it the eyes keep their current openness.
+   * An optional expression squints and tilts the eyes (anger).
    */
-  eyeShapes(pose, base, now) {
+  eyeShapes(pose, base, now, expression = null) {
     this.eyes.update(pose, now);
 
-    return this.eyes.shapes(base * this.proportions.headSize);
+    return this.eyes.shapes(
+      base * this.proportions.headSize,
+      expression ?? {}
+    );
   }
 
   /**

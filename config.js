@@ -204,6 +204,34 @@ export const CONFIG = {
         maxProgress: 0.72,
         max: 48,
       },
+      // One angry figure puffs smoke from the top of its head. Puffs are soft
+      // radial gradients made of overlapping lobes, so they read as smoke and
+      // not as bubbles. Sizes and distances are fractions of the body scale.
+      smoke: {
+        durationMs: 6000,
+        spawnMs: 170,
+        lifeMs: 1150,
+        // Puff half-size at full bloom, as a fraction of the body scale.
+        size: 0.1,
+        // Number of overlapping soft lobes per emission (a range), so every
+        // cloud gets a different organic silhouette.
+        lobes: [3, 5],
+        // Slow swirl of the lobes over the puff's life, in radians.
+        swirl: 2,
+        // How far a puff rises over its life, as a fraction of body scale.
+        rise: 0.6,
+        // Spawn spread around the top of the head, as a fraction of its radius.
+        spread: 0.9,
+        // Lateral drift, as a fraction of the body scale.
+        drift: 0.14,
+        // Opacity at birth; it fades as the puff ages.
+        opacity: 0.38,
+        // Stop spawning early enough for every puff to die with the reaction.
+        maxProgress: 0.79,
+        max: 80,
+        // Angry eyes while the smoke plays: squint and inward tilt.
+        eyes: { squint: 0.45, tilt: 0.35 },
+      },
     },
 
     // The receiving side of a punch: a torso hitbox that detects the fist,

@@ -31,6 +31,29 @@ function createPainter() {
     currentShape: [],
     rotations: [],
     colorCalls: [],
+    drawingContext: {
+      gradients: [],
+      arcs: [],
+      fills: 0,
+      fillStyle: null,
+      createRadialGradient(x0, y0, r0, x1, y1, r1) {
+        const gradient = {
+          stops: [],
+          addColorStop(offset, color) {
+            this.stops.push([offset, color]);
+          },
+        };
+        this.gradients.push({ x0, y0, r0, x1, y1, r1, gradient });
+        return gradient;
+      },
+      beginPath() {},
+      arc(x, y, radius) {
+        this.arcs.push({ x, y, radius });
+      },
+      fill() {
+        this.fills += 1;
+      },
+    },
     background() {},
     clear() {},
     createCanvas() {},
@@ -367,6 +390,36 @@ test("the view draws a heart", () => {
     "the bottom closes with a horizontal tangent",
     1e-6
   );
+});
+
+test("the view draws soft gradient smoke puffs", () => {
+  const view = new SkeletonView({}, { environment: false });
+  view.setVideoSize(640, 480);
+
+  const transform = view.transform(painter);
+  const puff = {
+    kind: "puff",
+    x: 320,
+    y: 100,
+    radius: 10,
+    color: "#ddeeff",
+    opacity: 0.4,
+    reaction: "smoke",
+  };
+
+  view.drawShapes(
+    painter,
+    [puff],
+    { bone: "#ffffff", joint: "#000000" },
+    transform,
+    1
+  );
+
+  const context = painter.drawingContext;
+  assert.equal(context.gradients.length, 1);
+  assert.equal(context.gradients[0].gradient.stops.length, 3);
+  assert.equal(context.arcs.length, 1);
+  assert.equal(context.fills, 1);
 });
 
 test("the view draws a wavy tear stream", () => {
