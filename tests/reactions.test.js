@@ -161,6 +161,28 @@ test("the director plays one reaction every interval", () => {
   assert.ok(director.update(10000, participants), "the next window plays");
 });
 
+test("the same reaction never plays twice in a row", () => {
+  // A random source of 0 would always pick the first entry: punch.
+  const director = new ReactionDirector({ random: () => 0 });
+  const participants = twoParticipants();
+
+  const first = director.update(0, participants);
+  assert.equal(first.id, "punch");
+
+  assert.equal(director.update(first.durationMs, participants), null);
+  const second = director.update(10000, participants);
+  assert.ok(second, "the next window plays");
+  assert.notEqual(second.id, first.id, "it does not repeat");
+
+  assert.equal(
+    director.update(10000 + second.durationMs, participants),
+    null
+  );
+  const third = director.update(20000, participants);
+  assert.ok(third, "a third window plays");
+  assert.notEqual(third.id, second.id, "it does not repeat either");
+});
+
 test("there is never more than one reaction at a time", () => {
   const director = new ReactionDirector({
     random: sequenceRandom(0, 0, 0, 0),

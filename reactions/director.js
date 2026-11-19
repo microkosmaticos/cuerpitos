@@ -5,10 +5,9 @@ import { REACTION_LIBRARY } from "./library.js";
  * One scene-level director for the whole pair.
  *
  * Every `intervalMs` it picks ONE reaction from the library and plays it. There
- * is never more than one active reaction: the next window does not open until
- * the interval has passed, and a new reaction cannot start while one is
- * running. Reactions that need both people only start when two valid
- * participants are present.
+ * is never more than one active reaction, and the same reaction never plays
+ * twice in a row while another option exists. Reactions that need both people
+ * only start when two valid participants are present.
  */
 export class ReactionDirector {
   constructor({ random = Math.random, library = REACTION_LIBRARY } = {}) {
@@ -16,6 +15,8 @@ export class ReactionDirector {
     this.library = library;
     this.nextAt = null;
     this.active = null;
+    // Last reaction that actually played, so the next window picks another.
+    this.lastId = null;
   }
 
   /**
@@ -60,17 +61,24 @@ export class ReactionDirector {
   start(now, participants, scene) {
     if (this.library.length === 0) return null;
 
-    const index = Math.min(
-      this.library.length - 1,
-      Math.floor(this.random() * this.library.length)
+    // Never repeat the last reaction while there is another option.
+    const candidates = this.library.filter(
+      (reaction) => reaction.id !== this.lastId
     );
-    const definition = this.library[index];
+    const pool = candidates.length > 0 ? candidates : this.library;
+    const index = Math.min(
+      pool.length - 1,
+      Math.floor(this.random() * pool.length)
+    );
+    const definition = pool[index];
     const started = definition.start(now, {
       participants,
       random: this.random,
       scene,
     });
     if (!started) return null;
+
+    this.lastId = definition.id;
 
     return {
       id: definition.id,
